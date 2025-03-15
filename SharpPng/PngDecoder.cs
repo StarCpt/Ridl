@@ -2,6 +2,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 
 namespace SharpPng
 {
@@ -214,9 +215,10 @@ namespace SharpPng
             return decodedImageData;
         }
 
-        private static void DecodeChunks(Stream pngStream, in PngInfo info, [NotNull] out byte[]? imageData)
+        private static void DecodeChunks(Stream pngStream, in PngInfo info, [NotNull] out byte[]? imageData, out PngColor[]? palette)
         {
             imageData = null;
+            palette = null;
             Span<byte> buffer = stackalloc byte[4];
 
             bool canBaseStreamSeek = pngStream.CanSeek;
@@ -246,10 +248,12 @@ namespace SharpPng
 
                 if (type == ChunkType.Palette)
                 {
-                    byte[] data = new byte[length];
-                    pngStream.ReadExactly(data);
+                    if (length % 3 != 0)
+                        throw new Exception("Invalid PLTE chunk length; Length must be divisible by 3.");
 
-                    // TODO: support
+                    palette = new PngColor[length / 3];
+                    Span<byte> flattenedPalette = MemoryMarshal.AsBytes(palette.AsSpan());
+                    pngStream.ReadExactly(flattenedPalette);
                 }
                 else if (type == ChunkType.Trailer)
                 {
@@ -271,6 +275,9 @@ namespace SharpPng
                 uint crc = BinaryPrimitives.ReadUInt32BigEndian(buffer);
             }
 
+            if (info.Format == PngPixelFormat.Indexed && palette == null)
+                throw new Exception($"Missing PLTE chunk; Palette is required for {PngPixelFormat.Indexed} pixel format.");
+
             if (imageData == null)
                 throw new Exception($"{nameof(pngStream)} doesn't contain IDAT chunks.");
         }
@@ -285,16 +292,17 @@ namespace SharpPng
 
             info = ReadHeaderChunk(pngStream);
 
-            if (info.Format == PngPixelFormat.Indexed)
-                throw new NotImplementedException(); // TODO
-
             if (info.Interlace)
                 throw new NotImplementedException(); // TODO
 
             if (info.Filter != 0)
                 throw new NotSupportedException("Invalid filter type.");
 
-            DecodeChunks(pngStream, info, out byte[] imgData);
+            if (!(info.BitsPerPixel is 8 or 16 or 24 or 32))
+                throw new NotImplementedException(); // TODO
+
+            DecodeChunks(pngStream, info, out byte[] imgData, out var palette);
+            info = info with { Palette = palette };
 
             return imgData;
         }
