@@ -122,14 +122,14 @@ namespace SharpPng
         private static byte[] DecodeImageData(ZLibStream decompressor, in PngInfo info)
         {
             int none = 0, sub = 0, up = 0, average = 0, paeth = 0;
-            int imageStride = info.Width * (info.BitsPerPixel / 8);
+            int imageStride = info.Width * info.BitsPerPixel / 8;
             byte[] decodedImageData = new byte[imageStride * info.Height];
 
             IReconstructor recon = info.BitsPerPixel switch
             {
                 24 => new Reconstruct24(info.Width),
                 32 => new Reconstruct32(info.Width),
-                _ => new ReconstructGeneric(info.Width, info.BitsPerPixel / 8),
+                _ => new ReconstructGeneric(info.Width, info.BitsPerPixel),
             };
 
             for (int y = 0; y < info.Height; y++)
@@ -296,10 +296,15 @@ namespace SharpPng
                 throw new NotImplementedException(); // TODO
 
             if (info.Filter != 0)
-                throw new NotSupportedException("Invalid filter type.");
+                throw new InvalidDataException("Invalid filter type.");
 
-            if (!(info.BitsPerPixel is 8 or 16 or 24 or 32))
+            // Non byte-aligned stride is unsupported (for now)
+            if ((info.Width * info.BitsPerPixel) % 8 != 0)
+            {
+                // PNG spec 7.2 (Scanlines) line 5:
+                // When there are multiple pixels per byte, some low-order bits of the last byte of a scanline may go unused. The contents of these unused bits are not specified.
                 throw new NotImplementedException(); // TODO
+            }
 
             DecodeChunks(pngStream, info, out byte[] imgData, out var palette);
             info = info with { Palette = palette };

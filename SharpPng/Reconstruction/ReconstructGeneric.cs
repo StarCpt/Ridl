@@ -1,23 +1,16 @@
 ﻿using SharpPng.Filtering;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SharpPng.Reconstruction
 {
     internal class ReconstructGeneric : IReconstructor
     {
-        private readonly int _imageWidth;
         private readonly int _bytesPerPixel;
         private readonly int _imageStride;
 
-        public ReconstructGeneric(int imageWidth, int bytesPerPixel)
+        public ReconstructGeneric(int imageWidth, int bitsPerPixel)
         {
-            _imageWidth = imageWidth;
-            _bytesPerPixel = bytesPerPixel;
-            _imageStride = _imageWidth * _bytesPerPixel;
+            _bytesPerPixel = bitsPerPixel < 8 ? 1 : (bitsPerPixel / 8);
+            _imageStride = imageWidth * bitsPerPixel / 8;
         }
 
         public void FilterSub(Span<byte> scanline)

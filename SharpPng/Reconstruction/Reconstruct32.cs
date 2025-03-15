@@ -6,13 +6,11 @@ namespace SharpPng.Reconstruction
 {
     internal class Reconstruct32 : IReconstructor
     {
-        private readonly int _imageWidth;
         private readonly int _imageStride;
 
         public Reconstruct32(int imageWidth)
         {
-            _imageWidth = imageWidth;
-            _imageStride = _imageWidth * 4;
+            _imageStride = imageWidth * 4;
         }
 
         public void FilterSub(Span<byte> scanline)
