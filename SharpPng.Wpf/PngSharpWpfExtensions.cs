@@ -75,21 +75,25 @@ namespace SharpPng.Wpf
                                 newImageSpan16[i * 4 + 3] = colorGray == alphaColor ? ushort.MinValue : ushort.MaxValue;
                             }
                             imageBytes = newImageBytes;
+                            SwapEndiannessFor16BitDepth(imageBytes);
                             break;
                         default: throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}");
                     }
                 }
                 else
                 {
-                    format = info.BitDepth switch
+                    switch (info.BitDepth)
                     {
-                        1 => PixelFormats.BlackWhite,
-                        2 => PixelFormats.Gray2,
-                        4 => PixelFormats.Gray4,
-                        8 => PixelFormats.Gray8,
-                        16 => PixelFormats.Gray16,
-                        _ => throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}"),
-                    };
+                        case 1: format = PixelFormats.BlackWhite; break;
+                        case 2: format = PixelFormats.Gray2; break;
+                        case 4: format = PixelFormats.Gray4; break;
+                        case 8: format = PixelFormats.Gray8; break;
+                        case 16:
+                            format = PixelFormats.Gray16;
+                            SwapEndiannessFor16BitDepth(imageBytes);
+                            break;
+                        default: throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}");
+                    }
                 }
             }
             else if (info.Format is PngPixelFormat.Rgb)
@@ -139,17 +143,23 @@ namespace SharpPng.Wpf
                                 newImageSpan16[j + 3] = alpha;
                             }
                             imageBytes = newImageBytes;
+                            SwapEndiannessFor16BitDepth(imageBytes);
                             break;
                         default: throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}");
                     };
                 }
                 else
                 {
-                    format = info.BitDepth switch
+                    switch (info.BitDepth)
                     {
-                        8 => PixelFormats.Rgb24,
-                        16 => PixelFormats.Rgb48,
-                        _ => throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}"),
+                        case 8:
+                            format = PixelFormats.Rgb24;
+                            break;
+                        case 16:
+                            format = PixelFormats.Rgb48;
+                            SwapEndiannessFor16BitDepth(imageBytes);
+                            break;
+                        default: throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}");
                     };
                 }
             }
@@ -163,6 +173,7 @@ namespace SharpPng.Wpf
                     8 => PixelFormats.Indexed8,
                     _ => throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}"),
                 };
+
                 if (info.Transparency?.PaletteTransparencyMap is byte[] paletteAlphaMap)
                 {
                     palette = new BitmapPalette(info.Palette!.Select((i, index) => Color.FromArgb(paletteAlphaMap[index], i.R, i.G, i.B)).ToArray());
@@ -212,6 +223,7 @@ namespace SharpPng.Wpf
                             newImageSpan16[i * 2 + 3] = a;
                         }
                         imageBytes = newImageBytes;
+                        SwapEndiannessFor16BitDepth(imageBytes);
                         break;
                     default: throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}");
                 }
@@ -230,6 +242,7 @@ namespace SharpPng.Wpf
                         break;
                     case 16:
                         format = PixelFormats.Rgba64;
+                        SwapEndiannessFor16BitDepth(imageBytes);
                         break;
                     default: throw new Exception($"Invalid bit depth for {info.Format} format. BitDepth={info.BitDepth}");
                 }
@@ -238,11 +251,19 @@ namespace SharpPng.Wpf
             {
                 throw new Exception($"Invalid pixel format: Format={info.Format}");
             }
-            
+
             double dpiX = 96, dpiY = 96; // TODO: detect suggested dpi in image metadata
             int stride = info.Width * format.BitsPerPixel / 8;
             BitmapSource bitmap = BitmapSource.Create(info.Width, info.Height, dpiX, dpiY, format, palette, imageBytes, stride);
             return bitmap;
+
+            static void SwapEndiannessFor16BitDepth(byte[] bytes)
+            {
+                for (int i = 0; i < bytes.Length; i += 2)
+                {
+                    (bytes[i], bytes[i + 1]) = (bytes[i + 1], bytes[i]);
+                }
+            }
         }
     }
 }

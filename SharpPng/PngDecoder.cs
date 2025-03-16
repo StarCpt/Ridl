@@ -347,6 +347,9 @@ namespace SharpPng
             if (info.Filter != 0)
                 throw new InvalidDataException("Invalid filter type.");
 
+            if (!BitConverter.IsLittleEndian)
+                throw new NotImplementedException("Big endian systems are not currently supported.");
+
             // Non byte-aligned stride is unsupported (for now)
             if ((info.Width * info.BitsPerPixel) % 8 != 0)
             {
