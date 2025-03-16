@@ -5,6 +5,8 @@ VisualStudioVersion = 17.13.35825.156
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpPng", "SharpPng\SharpPng.csproj", "{42F79FCA-1247-4CF8-A21A-43085FBD89D1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpPng.Wpf", "SharpPng.Wpf\SharpPng.Wpf.csproj", "{E3E35FAD-1126-AA57-5145-AB30C7D24321}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{42F79FCA-1247-4CF8-A21A-43085FBD89D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{42F79FCA-1247-4CF8-A21A-43085FBD89D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{42F79FCA-1247-4CF8-A21A-43085FBD89D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E3E35FAD-1126-AA57-5145-AB30C7D24321}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3E35FAD-1126-AA57-5145-AB30C7D24321}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3E35FAD-1126-AA57-5145-AB30C7D24321}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3E35FAD-1126-AA57-5145-AB30C7D24321}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

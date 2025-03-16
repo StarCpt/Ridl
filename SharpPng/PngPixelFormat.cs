@@ -7,7 +7,7 @@
         /// </summary>
         /// 
         /// <remarks>
-        /// Allowed bit depths: 1, 2, 4, 8, or 16
+        /// Allowed bit depths: 1, 2, 4, 8, 16
         /// </remarks>
         Grayscale = 0,
 
@@ -16,7 +16,7 @@
         /// </summary>
         /// 
         /// <remarks>
-        /// Allowed bit depths: 8 or 16
+        /// Allowed bit depths: 8, 16
         /// </remarks>
         Rgb = 2,
 
@@ -25,7 +25,7 @@
         /// </summary>
         /// 
         /// <remarks>
-        /// Allowed bit depths: 1, 2, 4, or 8
+        /// Allowed bit depths: 1, 2, 4, 8
         /// </remarks>
         Indexed = 3,
 
@@ -34,7 +34,7 @@
         /// </summary>
         /// 
         /// <remarks>
-        /// Allowed bit depths: 8 or 16
+        /// Allowed bit depths: 8, 16
         /// </remarks>
         GrayscaleWithAlpha = 4,
 

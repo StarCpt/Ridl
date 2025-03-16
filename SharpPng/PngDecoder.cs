@@ -124,7 +124,9 @@ namespace SharpPng
 
         private static byte[] DecodeImageData(ZLibStream decompressor, in PngMetadata info)
         {
+#if DEBUG
             int none = 0, sub = 0, up = 0, average = 0, paeth = 0;
+#endif
             int imageStride = info.Width * info.BitsPerPixel / 8;
             byte[] decodedImageData = new byte[imageStride * info.Height];
 
@@ -144,24 +146,32 @@ namespace SharpPng
 
                 if (filterType is FilterType.None)
                 {
+#if DEBUG
                     none++;
+#endif
                     continue;
                 }
                 else if (filterType is FilterType.Sub)
                 {
+#if DEBUG
                     sub++;
+#endif
                     recon.FilterSub(scanline);
                 }
                 else if (filterType is FilterType.Up)
                 {
+#if DEBUG
                     up++;
+#endif
                     if (y is 0)
                         continue;
                     recon.FilterUp(scanline, prevScanline);
                 }
                 else if (filterType is FilterType.Average)
                 {
+#if DEBUG
                     average++;
+#endif
                     if (y is 0)
                         recon.FilterAvg_Scan0(scanline);
                     else
@@ -169,7 +179,9 @@ namespace SharpPng
                 }
                 else if (filterType is FilterType.Paeth)
                 {
+#if DEBUG
                     paeth++;
+#endif
                     if (y is 0)
                         recon.FilterPaeth_Scan0(scanline);
                     else
