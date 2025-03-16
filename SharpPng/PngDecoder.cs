@@ -1,4 +1,5 @@
 ﻿using SharpPng.Reconstruction;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
@@ -17,6 +18,10 @@ namespace SharpPng
             public static readonly ChunkType ImageData = new("IDAT");
 
             // Optional Types
+            public static readonly ChunkType Transparency = new("tRNS");
+            public static readonly ChunkType PixelDimensions = new("pHYs");
+            public static readonly ChunkType SuggestedPalette = new("sPLT");
+            public static readonly ChunkType Timestamp = new("tIME");
 
             public readonly string Name => new([ (char)b0, (char)b1, (char)b2, (char)b3 ]);
             public readonly bool IsAncillary => (b0 & 0x20) != 0;
@@ -64,8 +69,6 @@ namespace SharpPng
 
         public static PngDecoder Default { get; } = new PngDecoder(false);
 
-        public static int debug1 = 0;
-
         private readonly bool _checkCrc;
 
         public PngDecoder(bool checkCrc)
@@ -91,7 +94,7 @@ namespace SharpPng
             return bytes.SequenceEqual(validSignature);
         }
 
-        private static PngInfo ReadHeaderChunk(Stream pngStream)
+        private static PngMetadata ReadHeaderChunk(Stream pngStream)
         {
             Span<byte> buffer = stackalloc byte[4];
 
@@ -107,7 +110,7 @@ namespace SharpPng
             pngStream.ReadExactly(buffer);
             uint crc = BinaryPrimitives.ReadUInt32BigEndian(buffer);
 
-            return new PngInfo
+            return new PngMetadata
             {
                 Width = (int)BinaryPrimitives.ReadUInt32BigEndian(headerData[..4]),
                 Height = (int)BinaryPrimitives.ReadUInt32BigEndian(headerData[4..8]),
@@ -119,7 +122,7 @@ namespace SharpPng
             };
         }
 
-        private static byte[] DecodeImageData(ZLibStream decompressor, in PngInfo info)
+        private static byte[] DecodeImageData(ZLibStream decompressor, in PngMetadata info)
         {
             int none = 0, sub = 0, up = 0, average = 0, paeth = 0;
             int imageStride = info.Width * info.BitsPerPixel / 8;
@@ -177,7 +180,7 @@ namespace SharpPng
             return decodedImageData;
         }
 
-        private static byte[] DecodeImageDataChunks(Stream pngStream, in PngInfo info, bool canBaseStreamSeek)
+        private static byte[] DecodeImageDataChunks(Stream pngStream, in PngMetadata info, bool canBaseStreamSeek)
         {
             // pngStream position should be at the start of the first IDAT chunk
 
@@ -215,10 +218,11 @@ namespace SharpPng
             return decodedImageData;
         }
 
-        private static void DecodeChunks(Stream pngStream, in PngInfo info, [NotNull] out byte[]? imageData, out PngColor[]? palette)
+        private static void DecodeChunks(Stream pngStream, in PngMetadata info, [NotNull] out byte[]? imageData, out PngColor[]? palette, out PngTransparency? transparency)
         {
             imageData = null;
             palette = null;
+            transparency = null;
             Span<byte> buffer = stackalloc byte[4];
 
             bool canBaseStreamSeek = pngStream.CanSeek;
@@ -264,11 +268,44 @@ namespace SharpPng
                 }
                 else
                 {
-                    byte[] data = new byte[length];
+                    byte[] dataArray = ArrayPool<byte>.Shared.Rent(length);
+                    Span<byte> data = new(dataArray, 0, length);
                     pngStream.ReadExactly(data);
+
+                    if (type == ChunkType.Transparency && info.Format is not PngPixelFormat.GrayscaleWithAlpha and not PngPixelFormat.Rgba)
+                    {
+                        // https://www.w3.org/TR/2003/REC-PNG-20031110/#11tRNS
+                        switch (info.Format)
+                        {
+                            case PngPixelFormat.Grayscale:
+                                ushort alphaColor = BinaryPrimitives.ReadUInt16BigEndian(data);
+                                transparency = new PngTransparency
+                                {
+                                    TransparentColorGrayscale = alphaColor,
+                                };
+                                break;
+                            case PngPixelFormat.Rgb:
+                                ushort alphaRed   = BinaryPrimitives.ReadUInt16BigEndian(data);
+                                ushort alphaGreen = BinaryPrimitives.ReadUInt16BigEndian(data[2..]);
+                                ushort alphaBlue  = BinaryPrimitives.ReadUInt16BigEndian(data[4..]);
+                                transparency = new PngTransparency
+                                {
+                                    TransparentColorRgb = (alphaRed, alphaGreen, alphaBlue),
+                                };
+                                break;
+                            case PngPixelFormat.Indexed:
+                                transparency = new PngTransparency
+                                {
+                                    PaletteTransparencyMap = data.ToArray(),
+                                };
+                                break;
+                        }
+                    }
 
                     if (!type.IsAncillary)
                         throw new NotImplementedException();
+
+                    ArrayPool<byte>.Shared.Return(dataArray);
                 }
 
                 pngStream.ReadExactly(buffer);
@@ -282,7 +319,7 @@ namespace SharpPng
                 throw new Exception($"{nameof(pngStream)} doesn't contain IDAT chunks.");
         }
 
-        public byte[] Decode(Stream pngStream, out PngInfo info)
+        public byte[] Decode(Stream pngStream, out PngMetadata info)
         {
             Span<byte> header = stackalloc byte[8];
             pngStream.ReadExactly(header);
@@ -306,8 +343,8 @@ namespace SharpPng
                 throw new NotImplementedException(); // TODO
             }
 
-            DecodeChunks(pngStream, info, out byte[] imgData, out var palette);
-            info = info with { Palette = palette };
+            DecodeChunks(pngStream, info, out byte[] imgData, out var palette, out var transparency);
+            info = info with { Palette = palette, Transparency = transparency };
 
             return imgData;
         }

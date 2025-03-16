@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-namespace SharpPng
+﻿namespace SharpPng
 {
-    public readonly struct PngInfo
+    public readonly struct PngMetadata
     {
         public int Width { get; init; }
         public int Height { get; init; }
@@ -14,6 +10,7 @@ namespace SharpPng
         public byte Filter { get; init; } // always 0
         public bool Interlace { get; init; }
         public PngColor[]? Palette { get; init; }
+        public PngTransparency? Transparency { get; init; }
 
         public int BitsPerPixel => Format switch
         {
