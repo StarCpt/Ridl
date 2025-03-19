@@ -7,12 +7,12 @@ namespace SharpPng.Reconstruction
     internal class Reconstruct24 : IReconstructor
     {
         private readonly int _imageStride;
-        private readonly ReconstructGeneric _base;
+        private readonly ReconstructGeneric _generic;
 
         public Reconstruct24(int imageWidth)
         {
             _imageStride = imageWidth * 3;
-            _base = new ReconstructGeneric(imageWidth, 24);
+            _generic = new ReconstructGeneric(imageWidth, 24);
         }
 
         public void FilterSub(Span<byte> scanline)
@@ -55,7 +55,7 @@ namespace SharpPng.Reconstruction
 
         public void FilterUp(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
         {
-            _base.FilterUp(scanline, prevScanline);
+            _generic.FilterUp(scanline, prevScanline);
         }
 
         public void FilterAvg_Scan0(Span<byte> scanline)

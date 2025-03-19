@@ -118,15 +118,63 @@ namespace SharpPng
                 Format = (PngPixelFormat)headerData[9],
                 Compression = (PngCompressionMethod)headerData[10],
                 Filter = headerData[11],
-                Interlace = headerData[12] != 0,
+                Interlaced = headerData[12] != 0,
             };
+        }
+
+#if DEBUG
+        private static int none = 0, sub = 0, up = 0, average = 0, paeth = 0;
+#endif
+
+        private static void DecodeScanline(IReconstructor recon, FilterType filterType, int y, Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        {
+            if (filterType is FilterType.None)
+            {
+#if DEBUG
+                none++;
+#endif
+                return;
+            }
+            else if (filterType is FilterType.Sub)
+            {
+#if DEBUG
+                sub++;
+#endif
+                recon.FilterSub(scanline);
+            }
+            else if (filterType is FilterType.Up)
+            {
+#if DEBUG
+                up++;
+#endif
+                if (y is 0)
+                    return;
+                recon.FilterUp(scanline, prevScanline);
+            }
+            else if (filterType is FilterType.Average)
+            {
+#if DEBUG
+                average++;
+#endif
+                if (y is 0)
+                    recon.FilterAvg_Scan0(scanline);
+                else
+                    recon.FilterAvg(scanline, prevScanline);
+            }
+            else if (filterType is FilterType.Paeth)
+            {
+#if DEBUG
+                paeth++;
+#endif
+                if (y is 0)
+                    recon.FilterPaeth_Scan0(scanline);
+                else
+                    recon.FilterPaeth(scanline, prevScanline);
+            }
         }
 
         private static byte[] DecodeImageData(ZLibStream decompressor, in PngMetadata info)
         {
-#if DEBUG
-            int none = 0, sub = 0, up = 0, average = 0, paeth = 0;
-#endif
             int imageStride = info.Width * info.BitsPerPixel / 8;
             byte[] decodedImageData = new byte[imageStride * info.Height];
 
@@ -144,48 +192,145 @@ namespace SharpPng
                 Span<byte> scanline = decodedImageData.AsSpan(y * imageStride, imageStride);
                 decompressor.ReadExactly(scanline);
 
-                if (filterType is FilterType.None)
-                {
-#if DEBUG
-                    none++;
-#endif
+                DecodeScanline(recon, filterType, y, scanline, prevScanline);
+            }
+
+            return decodedImageData;
+        }
+
+        private static (int width, int height) GetReducedImageSize(int pass, int imageWidth, int imageHeight)
+        {
+            byte[,] pixelOffsets =
+            {
+                { 0, 0 },
+                { 4, 0 },
+                { 0, 4 },
+                { 2, 0 },
+                { 0, 2 },
+                { 1, 0 },
+                { 0, 1 },
+            };
+            byte[,] pixelIntervals =
+            {
+                { 8, 8 },
+                { 8, 8 },
+                { 4, 8 },
+                { 4, 4 },
+                { 2, 4 },
+                { 2, 2 },
+                { 1, 2 },
+            };
+
+            int width = (imageWidth + pixelIntervals[pass, 0] - pixelOffsets[pass, 0] - 1) / pixelIntervals[pass, 0];
+            int height = (imageHeight + pixelIntervals[pass, 1] - pixelOffsets[pass, 1] - 1) / pixelIntervals[pass, 1];
+            return (width, height);
+        }
+
+        private static byte[] DecodeInterlacedImageData(ZLibStream decompressor, in PngMetadata info)
+        {
+            // TODO?: Support loading reduced images before the entire image is decoded
+
+            byte[,] pixelOffsets =
+            {
+                { 0, 0 },
+                { 4, 0 },
+                { 0, 4 },
+                { 2, 0 },
+                { 0, 2 },
+                { 1, 0 },
+                { 0, 1 },
+            };
+            byte[,] pixelIntervals =
+            {
+                { 8, 8 },
+                { 8, 8 },
+                { 4, 8 },
+                { 4, 4 },
+                { 2, 4 },
+                { 2, 2 },
+                { 1, 2 },
+            };
+
+            int imageStride = (int)float.Ceiling(info.Width * info.BitsPerPixel / 8f);
+            byte[] decodedImageData = new byte[imageStride * info.Height];
+
+            for (int pass = 0; pass < 7; pass++)
+            {
+                (int passWidth, int passHeight) = GetReducedImageSize(pass, info.Width, info.Height);
+
+                if (passWidth == 0 || passHeight == 0)
                     continue;
-                }
-                else if (filterType is FilterType.Sub)
+
+                int passStride = (int)float.Ceiling(passWidth * info.BitsPerPixel / 8f);
+
+                IReconstructor recon = info.BitsPerPixel switch
                 {
-#if DEBUG
-                    sub++;
-#endif
-                    recon.FilterSub(scanline);
-                }
-                else if (filterType is FilterType.Up)
+                    24 => new Reconstruct24(passWidth),
+                    32 => new Reconstruct32(passWidth),
+                    _ => new ReconstructGeneric(passWidth, info.BitsPerPixel),
+                };
+
+                byte[] prevScanline = new byte[passStride];
+                byte[] scanline = new byte[passStride];
+                for (int y = 0; y < passHeight; y++)
                 {
-#if DEBUG
-                    up++;
-#endif
-                    if (y is 0)
-                        continue;
-                    recon.FilterUp(scanline, prevScanline);
-                }
-                else if (filterType is FilterType.Average)
-                {
-#if DEBUG
-                    average++;
-#endif
-                    if (y is 0)
-                        recon.FilterAvg_Scan0(scanline);
+                    FilterType filterType = (FilterType)decompressor.ReadByte();
+                    decompressor.ReadExactly(scanline);
+
+                    DecodeScanline(recon, filterType, y, scanline, prevScanline);
+
+                    Span<byte> targetScanline = decodedImageData.AsSpan((y * pixelIntervals[pass, 1] + pixelOffsets[pass, 1]) * imageStride, imageStride);
+                    if (info.BitsPerPixel >= 8)
+                    {
+                        int bytesPerPixel = info.BitsPerPixel / 8;
+                        for (int x = 0; x < passWidth; x++)
+                        {
+                            Span<byte> sourcePixel = scanline.AsSpan(x * bytesPerPixel, bytesPerPixel);
+                            Span<byte> targetPixel = targetScanline.Slice((x * pixelIntervals[pass, 0] + pixelOffsets[pass, 0]) * bytesPerPixel, bytesPerPixel);
+
+                            sourcePixel.CopyTo(targetPixel);
+                        }
+                    }
                     else
-                        recon.FilterAvg(scanline, prevScanline);
-                }
-                else if (filterType is FilterType.Paeth)
-                {
-#if DEBUG
-                    paeth++;
-#endif
-                    if (y is 0)
-                        recon.FilterPaeth_Scan0(scanline);
-                    else
-                        recon.FilterPaeth(scanline, prevScanline);
+                    {
+                        // Stride might not be aligned to byte
+                        // in that case the last few bits of the scanline aren't used
+                        if (info.BitsPerPixel == 1)
+                        {
+                            for (int x = 0, targetPixelBitPos = pixelOffsets[pass, 0]; x < passWidth; x++, targetPixelBitPos += pixelIntervals[pass, 0])
+                            {
+                                int val = (scanline[x / 8] << (x % 8)) & 0b_10000000;
+                                targetScanline[targetPixelBitPos / 8] |= (byte)(val >> (targetPixelBitPos % 8));
+                            }
+                        }
+                        else if (info.BitsPerPixel == 2)
+                        {
+                            // (2bpp)   0b_00000000
+                            // Pixel 1:    ..
+                            // Pixel 2:      ..
+                            // Pixel 3:        ..
+                            // Pixel 4:          ..
+                            for (int x = 0, targetPixelBitPos = pixelOffsets[pass, 0]; x < passWidth; x++, targetPixelBitPos += pixelIntervals[pass, 0])
+                            {
+                                int val = (scanline[x / 4] << (x % 4 * 2)) & 0b_11000000;
+                                targetScanline[targetPixelBitPos / 4] |= (byte)(val >> (targetPixelBitPos % 4 * 2));
+                            }
+                        }
+                        else if (info.BitsPerPixel == 4)
+                        {
+                            for (int x = 0, targetPixelBitPos = pixelOffsets[pass, 0]; x < passWidth; x++, targetPixelBitPos += pixelIntervals[pass, 0])
+                            {
+                                int val = (scanline[x / 2] << (x % 2 * 4)) & 0b_11110000;
+                                targetScanline[targetPixelBitPos / 2] |= (byte)(val >> (targetPixelBitPos % 2 * 4));
+                            }
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid bit depth.");
+                        }
+                    }
+
+                    scanline.CopyTo(prevScanline.AsSpan());
                 }
             }
 
@@ -226,7 +371,11 @@ namespace SharpPng
 
             compressedImageDataStream.Position = 0;
             using ZLibStream decompressor = new(compressedImageDataStream, CompressionMode.Decompress);
-            byte[] decodedImageData = DecodeImageData(decompressor, info);
+            byte[] decodedImageData = info.Interlaced switch
+            {
+                false => DecodeImageData(decompressor, info),
+                true => DecodeInterlacedImageData(decompressor, info),
+            };
             return decodedImageData;
         }
 
@@ -340,9 +489,6 @@ namespace SharpPng
                 throw new Exception($"Provided {nameof(pngStream)} does not contain a valid signature.");
 
             info = ReadHeaderChunk(pngStream);
-
-            if (info.Interlace)
-                throw new NotImplementedException(); // TODO
 
             if (info.Filter != 0)
                 throw new InvalidDataException("Invalid filter type.");

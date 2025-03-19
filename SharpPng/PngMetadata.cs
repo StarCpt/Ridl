@@ -8,7 +8,7 @@
         public PngPixelFormat Format { get; init; }
         public PngCompressionMethod Compression { get; init; } // always 0
         public byte Filter { get; init; } // always 0
-        public bool Interlace { get; init; }
+        public bool Interlaced { get; init; }
         public PngColor[]? Palette { get; init; }
         public PngTransparency? Transparency { get; init; }
 
@@ -25,6 +25,16 @@
             PngPixelFormat.GrayscaleWithAlpha => BitDepth * 2,
             // 8, 16
             PngPixelFormat.Rgba => BitDepth * 4,
+            _ => throw new Exception("Unknown pixel format."),
+        };
+
+        public int Channels => Format switch
+        {
+            PngPixelFormat.Grayscale => 1,
+            PngPixelFormat.Rgb => 3,
+            PngPixelFormat.Indexed => 1,
+            PngPixelFormat.GrayscaleWithAlpha => 2,
+            PngPixelFormat.Rgba => 4,
             _ => throw new Exception("Unknown pixel format."),
         };
     }
