@@ -175,7 +175,7 @@ namespace SharpPng
 
         private static byte[] DecodeImageData(ZLibStream decompressor, in PngMetadata info)
         {
-            int imageStride = info.Width * info.BitsPerPixel / 8;
+            int imageStride = MathHelpers.DivRoundUp(info.Width * info.BitsPerPixel, 8);
             byte[] decodedImageData = new byte[imageStride * info.Height];
 
             IReconstructor recon = info.BitsPerPixel switch
@@ -221,8 +221,8 @@ namespace SharpPng
                 { 1, 2 },
             };
 
-            int width = (imageWidth + pixelIntervals[pass, 0] - pixelOffsets[pass, 0] - 1) / pixelIntervals[pass, 0];
-            int height = (imageHeight + pixelIntervals[pass, 1] - pixelOffsets[pass, 1] - 1) / pixelIntervals[pass, 1];
+            int width = MathHelpers.DivRoundUp(imageWidth - pixelOffsets[pass, 0], pixelIntervals[pass, 0]);
+            int height = MathHelpers.DivRoundUp(imageHeight - pixelOffsets[pass, 1], pixelIntervals[pass, 1]);
             return (width, height);
         }
 
@@ -251,7 +251,7 @@ namespace SharpPng
                 { 1, 2 },
             };
 
-            int imageStride = (int)float.Ceiling(info.Width * info.BitsPerPixel / 8f);
+            int imageStride = MathHelpers.DivRoundUp(info.Width * info.BitsPerPixel, 8);
             byte[] decodedImageData = new byte[imageStride * info.Height];
 
             for (int pass = 0; pass < 7; pass++)
@@ -261,7 +261,7 @@ namespace SharpPng
                 if (passWidth == 0 || passHeight == 0)
                     continue;
 
-                int passStride = (int)float.Ceiling(passWidth * info.BitsPerPixel / 8f);
+                int passStride = MathHelpers.DivRoundUp(passWidth * info.BitsPerPixel, 8);
 
                 IReconstructor recon = info.BitsPerPixel switch
                 {
@@ -305,7 +305,7 @@ namespace SharpPng
                         }
                         else if (info.BitsPerPixel == 2)
                         {
-                            // (2bpp)   0b_00000000
+                            // (2bpp)   0b_00000000 <- least significant bit (0x1)
                             // Pixel 1:    ..
                             // Pixel 2:      ..
                             // Pixel 3:        ..
@@ -495,14 +495,6 @@ namespace SharpPng
 
             if (!BitConverter.IsLittleEndian)
                 throw new NotImplementedException("Big endian systems are not currently supported.");
-
-            // Non byte-aligned stride is unsupported (for now)
-            if ((info.Width * info.BitsPerPixel) % 8 != 0)
-            {
-                // PNG spec 7.2 (Scanlines) line 5:
-                // When there are multiple pixels per byte, some low-order bits of the last byte of a scanline may go unused. The contents of these unused bits are not specified.
-                throw new NotImplementedException(); // TODO
-            }
 
             DecodeChunks(pngStream, info, out byte[] imgData, out var palette, out var transparency);
             info = info with { Palette = palette, Transparency = transparency };

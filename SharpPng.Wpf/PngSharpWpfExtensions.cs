@@ -263,7 +263,7 @@ namespace SharpPng.Wpf
             }
 
             double dpiX = 96, dpiY = 96; // TODO: detect suggested dpi in image metadata
-            int stride = info.Width * format.BitsPerPixel / 8;
+            int stride = MathHelpers.DivRoundUp(info.Width * format.BitsPerPixel, 8);
             BitmapSource bitmap = BitmapSource.Create(info.Width, info.Height, dpiX, dpiY, format, palette, imageBytes, stride);
             return bitmap;
 
