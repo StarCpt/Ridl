@@ -337,6 +337,14 @@ namespace SharpPng
             return decodedImageData;
         }
 
+        private static void SwapEndiannessFor16BitDepth(byte[] bytes)
+        {
+            for (int i = 0; i < bytes.Length; i += 2)
+            {
+                (bytes[i], bytes[i + 1]) = (bytes[i + 1], bytes[i]);
+            }
+        }
+
         private static byte[] DecodeImageDataChunks(Stream pngStream, in PngMetadata info, bool canBaseStreamSeek)
         {
             // pngStream position should be at the start of the first IDAT chunk
@@ -376,6 +384,12 @@ namespace SharpPng
                 false => DecodeImageData(decompressor, info),
                 true => DecodeInterlacedImageData(decompressor, info),
             };
+
+            if (info.BitDepth == 16)
+            {
+                SwapEndiannessFor16BitDepth(decodedImageData);
+            }
+
             return decodedImageData;
         }
 
