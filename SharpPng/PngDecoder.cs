@@ -379,16 +379,17 @@ namespace SharpPng
             return decodedImageData;
         }
 
-        private static void DecodeChunks(Stream pngStream, in PngMetadata info, [NotNull] out byte[]? imageData, out PngColor[]? palette, out PngTransparency? transparency)
+        private static void DecodeChunks(Stream pngStream, in PngMetadata info, [NotNull] out byte[]? imageData, out PngColor[]? palette, out PngTransparency? transparency, out PngPixelDimensions? pixelDimensions)
         {
             imageData = null;
             palette = null;
             transparency = null;
+            pixelDimensions = null;
+
             Span<byte> buffer = stackalloc byte[4];
 
             bool canBaseStreamSeek = pngStream.CanSeek;
-
-            if (!pngStream.CanSeek)
+            if (!canBaseStreamSeek)
                 pngStream = new ReadSeekableStream(pngStream, 8);
 
             bool endOfImage = false;
@@ -462,6 +463,15 @@ namespace SharpPng
                                 break;
                         }
                     }
+                    else if (type == ChunkType.PixelDimensions)
+                    {
+                        pixelDimensions = new PngPixelDimensions
+                        {
+                            PixelsPerUnitX = (int)BinaryPrimitives.ReadUInt32BigEndian(data),
+                            PixelsPerUnitY = (int)BinaryPrimitives.ReadUInt32BigEndian(data[4..]),
+                            Units = (PngPixelUnit)data[8],
+                        };
+                    }
 
                     if (!type.IsAncillary)
                         throw new NotImplementedException();
@@ -496,8 +506,8 @@ namespace SharpPng
             if (!BitConverter.IsLittleEndian)
                 throw new NotImplementedException("Big endian systems are not currently supported.");
 
-            DecodeChunks(pngStream, info, out byte[] imgData, out var palette, out var transparency);
-            info = info with { Palette = palette, Transparency = transparency };
+            DecodeChunks(pngStream, info, out byte[] imgData, out var palette, out var transparency, out var pixelDimensions);
+            info = info with { Palette = palette, Transparency = transparency, PixelDimensions = pixelDimensions };
 
             return imgData;
         }

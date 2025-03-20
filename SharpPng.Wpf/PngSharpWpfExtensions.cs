@@ -262,7 +262,21 @@ namespace SharpPng.Wpf
                 throw new Exception($"Invalid pixel format: Format={info.Format}");
             }
 
-            double dpiX = 96, dpiY = 96; // TODO: detect suggested dpi in image metadata
+            double dpiX = 96, dpiY = 96;
+            if (info.PixelDimensions is PngPixelDimensions dims)
+            {
+                if (dims.Units is PngPixelUnit.Unknown)
+                {
+                    double aspectRatio = (double)dims.PixelsPerUnitX / dims.PixelsPerUnitY;
+                    dpiX *= aspectRatio;
+                }
+                else if (dims.Units is PngPixelUnit.Meter)
+                {
+                    dpiX = double.Round(dims.PixelsPerUnitX / 39.3700787402, 1);
+                    dpiY = double.Round(dims.PixelsPerUnitY / 39.3700787402, 1);
+                }
+            }
+
             int stride = MathHelpers.DivRoundUp(info.Width * format.BitsPerPixel, 8);
             BitmapSource bitmap = BitmapSource.Create(info.Width, info.Height, dpiX, dpiY, format, palette, imageBytes, stride);
             return bitmap;

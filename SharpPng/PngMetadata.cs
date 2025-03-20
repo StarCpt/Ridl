@@ -11,6 +11,7 @@
         public bool Interlaced { get; init; }
         public PngColor[]? Palette { get; init; }
         public PngTransparency? Transparency { get; init; }
+        public PngPixelDimensions? PixelDimensions { get; init; }
 
         public int BitsPerPixel => Format switch
         {
