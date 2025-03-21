@@ -11,7 +11,7 @@ namespace SharpPng.Reconstruction
         public ReconstructGeneric(int imageWidth, int bitsPerPixel)
         {
             _bytesPerPixel = bitsPerPixel < 8 ? 1 : (bitsPerPixel / 8);
-            _imageStride = imageWidth * bitsPerPixel / 8;
+            _imageStride = MathHelpers.DivRoundUp(imageWidth * bitsPerPixel, 8);
         }
 
         public void FilterSub(Span<byte> scanline)
