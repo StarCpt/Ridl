@@ -9,54 +9,6 @@ namespace SharpPng
 {
     public class PngDecoder
     {
-        private readonly struct ChunkType
-        {
-            // Critical Types
-            public static readonly ChunkType Header = new("IHDR");
-            public static readonly ChunkType Trailer = new("IEND");
-            public static readonly ChunkType Palette = new("PLTE");
-            public static readonly ChunkType ImageData = new("IDAT");
-
-            // Optional Types
-            public static readonly ChunkType Transparency = new("tRNS");
-            public static readonly ChunkType PixelDimensions = new("pHYs");
-            public static readonly ChunkType SuggestedPalette = new("sPLT");
-            public static readonly ChunkType Timestamp = new("tIME");
-
-            public readonly string Name => new([ (char)b0, (char)b1, (char)b2, (char)b3 ]);
-            public readonly bool IsAncillary => (b0 & 0x20) != 0;
-            public readonly bool IsPrivate => (b1 & 0x20) != 0;
-            public readonly bool IsReserved => (b2 & 0x20) != 0;
-            public readonly bool IsSafeToCopy => (b3 & 0x20) != 0;
-
-            public readonly byte b0, b1, b2, b3;
-
-            private ChunkType(string name)
-            {
-                b0 = Convert.ToByte(name[0]);
-                b1 = Convert.ToByte(name[1]);
-                b2 = Convert.ToByte(name[2]);
-                b3 = Convert.ToByte(name[3]);
-            }
-
-            public ChunkType(ReadOnlySpan<byte> data)
-            {
-                b0 = data[0];
-                b1 = data[1];
-                b2 = data[2];
-                b3 = data[3];
-            }
-
-            public override string ToString()
-            {
-                return Name;
-            }
-
-            public static bool operator ==(ChunkType x, ChunkType y) => x.b0 == y.b0 && x.b1 == y.b1 && x.b2 == y.b2 && x.b3 == y.b3;
-            public static bool operator !=(ChunkType x, ChunkType y) => x.b0 != y.b0 || x.b1 != y.b1 || x.b2 != y.b2 || x.b3 != y.b3;
-            public override bool Equals([NotNullWhen(true)] object? obj) => obj is ChunkType chunkType && this == chunkType;
-            public override int GetHashCode() => (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
-        }
 
         private enum FilterType : byte
         {
@@ -345,45 +297,20 @@ namespace SharpPng
             }
         }
 
-        private static byte[] DecodeImageDataChunks(Stream pngStream, in PngMetadata info, bool canBaseStreamSeek)
+        private byte[] DecodeImageDataChunks(Stream pngStream, in PngMetadata info)
         {
             // pngStream position should be at the start of the first IDAT chunk
 
-            Span<byte> buffer = stackalloc byte[4]; // buffer for reading 32-bit values (length, chunkType, crc)
-
-            // TODO: create wrapper stream around pngstream that only reads the IDAT chunk data to avoid unnecessary memory allocations
-            using MemoryStream compressedImageDataStream = new(canBaseStreamSeek ? (int)(pngStream.Length - pngStream.Position) : 0);
-
-            while (true)
-            {
-                pngStream.ReadExactly(buffer);
-                int chunkDataLength = (int)BinaryPrimitives.ReadUInt32BigEndian(buffer);
-
-                pngStream.ReadExactly(buffer);
-                ChunkType chunkType = new(buffer);
-
-                if (chunkType != ChunkType.ImageData)
-                {
-                    pngStream.Position -= 8; // rewind the stream to the beginning of the chunk
-                    break;
-                }
-
-                compressedImageDataStream.SetLength(compressedImageDataStream.Length + chunkDataLength);
-                byte[] backingBuffer = compressedImageDataStream.GetBuffer();
-                pngStream.ReadExactly(backingBuffer, (int)compressedImageDataStream.Position, chunkDataLength);
-                compressedImageDataStream.Position += chunkDataLength;
-
-                pngStream.ReadExactly(buffer);
-                uint crc = BinaryPrimitives.ReadUInt32BigEndian(buffer);
-            }
-
-            compressedImageDataStream.Position = 0;
+            using ImageDataReaderStream compressedImageDataStream = new(pngStream, _checkCrc);
             using ZLibStream decompressor = new(compressedImageDataStream, CompressionMode.Decompress);
             byte[] decodedImageData = info.Interlaced switch
             {
                 false => DecodeImageData(decompressor, info),
                 true => DecodeInterlacedImageData(decompressor, info),
             };
+
+            // when ImageDataReaderStream finishes reading, the position is at the end of the chunkType value of the chunk after the last IDAT chunk
+            pngStream.Position -= 8;
 
             if (info.BitDepth == 16)
             {
@@ -393,7 +320,7 @@ namespace SharpPng
             return decodedImageData;
         }
 
-        private static void DecodeChunks(Stream pngStream, in PngMetadata info, [NotNull] out byte[]? imageData, out PngColor[]? palette, out PngTransparency? transparency, out PngPixelDimensions? pixelDimensions)
+        private void DecodeChunks(Stream pngStream, in PngMetadata info, [NotNull] out byte[]? imageData, out PngColor[]? palette, out PngTransparency? transparency, out PngPixelDimensions? pixelDimensions)
         {
             imageData = null;
             palette = null;
@@ -421,7 +348,7 @@ namespace SharpPng
                         throw new Exception("IDAT chunks must be contiguous.");
 
                     pngStream.Position -= 8; // rewind to the start of the chunk
-                    imageData = DecodeImageDataChunks(pngStream, info, canBaseStreamSeek);
+                    imageData = DecodeImageDataChunks(pngStream, info);
 
                     continue;
                 }
