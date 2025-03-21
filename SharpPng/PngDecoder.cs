@@ -3,13 +3,13 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using System.IO.Hashing;
 using System.Runtime.InteropServices;
 
 namespace SharpPng
 {
     public class PngDecoder
     {
-
         private enum FilterType : byte
         {
             None = 0,
@@ -22,6 +22,7 @@ namespace SharpPng
         public static PngDecoder Default { get; } = new PngDecoder(false);
 
         private readonly bool _checkCrc;
+        private readonly Crc32 _crc = new();
 
         public PngDecoder(bool checkCrc)
         {
@@ -44,6 +45,18 @@ namespace SharpPng
             ];
 
             return bytes.SequenceEqual(validSignature);
+        }
+
+        private bool CheckCrc(ChunkType chunkType, ReadOnlySpan<byte> chunkData, uint checkCrcValue)
+        {
+            _crc.Reset();
+
+            Span<byte> chunkTypeBytes = [ chunkType.b0, chunkType.b1, chunkType.b2, chunkType.b3, ];
+            _crc.Append(chunkTypeBytes);
+            _crc.Append(chunkData);
+
+            uint currentHash = _crc.GetCurrentHashAsUInt32();
+            return currentHash == checkCrcValue;
         }
 
         private static PngMetadata ReadHeaderChunk(Stream pngStream)
@@ -353,6 +366,10 @@ namespace SharpPng
                     continue;
                 }
 
+                byte[] dataArray = ArrayPool<byte>.Shared.Rent(length);
+                Span<byte> data = new(dataArray, 0, length);
+                pngStream.ReadExactly(data);
+
                 if (type == ChunkType.Palette)
                 {
                     if (length % 3 != 0)
@@ -360,7 +377,7 @@ namespace SharpPng
 
                     palette = new PngColor[length / 3];
                     Span<byte> flattenedPalette = MemoryMarshal.AsBytes(palette.AsSpan());
-                    pngStream.ReadExactly(flattenedPalette);
+                    data.CopyTo(flattenedPalette);
                 }
                 else if (type == ChunkType.Trailer)
                 {
@@ -369,59 +386,62 @@ namespace SharpPng
                     if (length != 0)
                         throw new Exception("Trailer chunk length must be 0.");
                 }
-                else
+                else if (type == ChunkType.Transparency && info.Format is not PngPixelFormat.GrayscaleWithAlpha and not PngPixelFormat.Rgba)
                 {
-                    byte[] dataArray = ArrayPool<byte>.Shared.Rent(length);
-                    Span<byte> data = new(dataArray, 0, length);
-                    pngStream.ReadExactly(data);
-
-                    if (type == ChunkType.Transparency && info.Format is not PngPixelFormat.GrayscaleWithAlpha and not PngPixelFormat.Rgba)
+                    // https://www.w3.org/TR/2003/REC-PNG-20031110/#11tRNS
+                    switch (info.Format)
                     {
-                        // https://www.w3.org/TR/2003/REC-PNG-20031110/#11tRNS
-                        switch (info.Format)
-                        {
-                            case PngPixelFormat.Grayscale:
-                                ushort alphaColor = BinaryPrimitives.ReadUInt16BigEndian(data);
-                                transparency = new PngTransparency
-                                {
-                                    TransparentColorGrayscale = alphaColor,
-                                };
-                                break;
-                            case PngPixelFormat.Rgb:
-                                ushort alphaRed   = BinaryPrimitives.ReadUInt16BigEndian(data);
-                                ushort alphaGreen = BinaryPrimitives.ReadUInt16BigEndian(data[2..]);
-                                ushort alphaBlue  = BinaryPrimitives.ReadUInt16BigEndian(data[4..]);
-                                transparency = new PngTransparency
-                                {
-                                    TransparentColorRgb = (alphaRed, alphaGreen, alphaBlue),
-                                };
-                                break;
-                            case PngPixelFormat.Indexed:
-                                transparency = new PngTransparency
-                                {
-                                    PaletteTransparencyMap = data.ToArray(),
-                                };
-                                break;
-                        }
+                        case PngPixelFormat.Grayscale:
+                            ushort alphaColor = BinaryPrimitives.ReadUInt16BigEndian(data);
+                            transparency = new PngTransparency
+                            {
+                                TransparentColorGrayscale = alphaColor,
+                            };
+                            break;
+                        case PngPixelFormat.Rgb:
+                            ushort alphaRed   = BinaryPrimitives.ReadUInt16BigEndian(data);
+                            ushort alphaGreen = BinaryPrimitives.ReadUInt16BigEndian(data[2..]);
+                            ushort alphaBlue  = BinaryPrimitives.ReadUInt16BigEndian(data[4..]);
+                            transparency = new PngTransparency
+                            {
+                                TransparentColorRgb = (alphaRed, alphaGreen, alphaBlue),
+                            };
+                            break;
+                        case PngPixelFormat.Indexed:
+                            transparency = new PngTransparency
+                            {
+                                PaletteTransparencyMap = data.ToArray(),
+                            };
+                            break;
                     }
-                    else if (type == ChunkType.PixelDimensions)
+                }
+                else if (type == ChunkType.PixelDimensions)
+                {
+                    pixelDimensions = new PngPixelDimensions
                     {
-                        pixelDimensions = new PngPixelDimensions
-                        {
-                            PixelsPerUnitX = (int)BinaryPrimitives.ReadUInt32BigEndian(data),
-                            PixelsPerUnitY = (int)BinaryPrimitives.ReadUInt32BigEndian(data[4..]),
-                            Units = (PngPixelUnit)data[8],
-                        };
-                    }
+                        PixelsPerUnitX = (int)BinaryPrimitives.ReadUInt32BigEndian(data),
+                        PixelsPerUnitY = (int)BinaryPrimitives.ReadUInt32BigEndian(data[4..]),
+                        Units = (PngPixelUnit)data[8],
+                    };
+                }
+                else if (type == ChunkType.SuggestedPalette)
+                {
 
-                    if (!type.IsAncillary)
-                        throw new NotImplementedException();
-
-                    ArrayPool<byte>.Shared.Return(dataArray);
+                }
+                else if (!type.IsAncillary && !type.IsPrivate)
+                {
+                    throw new Exception($"Unknown critical chunk: {type.Name}");
                 }
 
                 pngStream.ReadExactly(buffer);
-                uint crc = BinaryPrimitives.ReadUInt32BigEndian(buffer);
+                if (_checkCrc)
+                {
+                    uint crc = BinaryPrimitives.ReadUInt32BigEndian(buffer);
+                    if (!CheckCrc(type, data, crc))
+                        throw new Exception("CRC does not match.");
+                }
+
+                ArrayPool<byte>.Shared.Return(dataArray);
             }
 
             if (info.Format == PngPixelFormat.Indexed && palette == null)
