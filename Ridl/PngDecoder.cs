@@ -312,6 +312,7 @@ namespace Ridl
             // pngStream position should be at the start of the first IDAT chunk
 
             using ImageDataReaderStream compressedImageDataStream = new(pngStream, _checkCrc);
+            // TODO/NOTE: DeflateStream/ZLibStream is about 20% slower in .net 8 than it is in .net 9
             using ZLibStream decompressor = new(compressedImageDataStream, CompressionMode.Decompress);
             byte[] decodedImageData = info.Interlaced switch
             {
