@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Ridl.Reconstruction
+namespace Ridl.Png.Reconstruction
 {
     internal interface IReconstructor
     {

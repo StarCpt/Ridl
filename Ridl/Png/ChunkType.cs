@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace Ridl
+namespace Ridl.Png
 {
     internal readonly struct ChunkType
     {
@@ -67,6 +67,6 @@ namespace Ridl
         public static bool operator ==(ChunkType x, ChunkType y) => x.b0 == y.b0 && x.b1 == y.b1 && x.b2 == y.b2 && x.b3 == y.b3;
         public static bool operator !=(ChunkType x, ChunkType y) => x.b0 != y.b0 || x.b1 != y.b1 || x.b2 != y.b2 || x.b3 != y.b3;
         public override bool Equals([NotNullWhen(true)] object? obj) => obj is ChunkType chunkType && this == chunkType;
-        public override int GetHashCode() => (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+        public override int GetHashCode() => b0 << 24 | b1 << 16 | b2 << 8 | b3;
     }
 }

@@ -4,11 +4,11 @@ using Ridl.Png;
 namespace Ridl.Benchmark
 {
     [MemoryDiagnoser(false)]
-    public class DecodeBenchmark
+    public class PngDecodeBenchmark
     {
         private readonly byte[] _pngBytes;
 
-        public DecodeBenchmark()
+        public PngDecodeBenchmark()
         {
             string file = Environment.GetEnvironmentVariable("pngFile") ?? throw new Exception("pngFile envVar not found. This exception shouldn't be thrown!");
             using var fs = File.OpenRead(file);

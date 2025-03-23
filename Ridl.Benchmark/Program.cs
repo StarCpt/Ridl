@@ -14,7 +14,7 @@ namespace Ridl.Benchmark
             if (!File.Exists(file))
                 throw new FileNotFoundException(null, file);
 
-            BenchmarkRunner.Run<DecodeBenchmark>(null, [ $"--envVars", $"pngFile:{file}" ]);
+            BenchmarkRunner.Run<PngDecodeBenchmark>(null, [ $"--envVars", $"pngFile:{file}" ]);
         }
     }
 }

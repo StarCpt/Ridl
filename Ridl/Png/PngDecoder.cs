@@ -1,4 +1,4 @@
-﻿using Ridl.Reconstruction;
+﻿using Ridl.Png.Reconstruction;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
@@ -6,7 +6,7 @@ using System.IO.Compression;
 using System.IO.Hashing;
 using System.Runtime.InteropServices;
 
-namespace Ridl
+namespace Ridl.Png
 {
     public class PngDecoder
     {
@@ -261,8 +261,8 @@ namespace Ridl
                         {
                             for (int x = 0, targetPixelBitPos = pixelOffsets[pass, 0]; x < passWidth; x++, targetPixelBitPos += pixelIntervals[pass, 0])
                             {
-                                int val = (scanline[x / 8] << (x % 8)) & 0b_10000000;
-                                targetScanline[targetPixelBitPos / 8] |= (byte)(val >> (targetPixelBitPos % 8));
+                                int val = scanline[x / 8] << x % 8 & 0b_10000000;
+                                targetScanline[targetPixelBitPos / 8] |= (byte)(val >> targetPixelBitPos % 8);
                             }
                         }
                         else if (info.BitsPerPixel == 2)
@@ -274,16 +274,16 @@ namespace Ridl
                             // Pixel 4:          ..
                             for (int x = 0, targetPixelBitPos = pixelOffsets[pass, 0]; x < passWidth; x++, targetPixelBitPos += pixelIntervals[pass, 0])
                             {
-                                int val = (scanline[x / 4] << (x % 4 * 2)) & 0b_11000000;
-                                targetScanline[targetPixelBitPos / 4] |= (byte)(val >> (targetPixelBitPos % 4 * 2));
+                                int val = scanline[x / 4] << x % 4 * 2 & 0b_11000000;
+                                targetScanline[targetPixelBitPos / 4] |= (byte)(val >> targetPixelBitPos % 4 * 2);
                             }
                         }
                         else if (info.BitsPerPixel == 4)
                         {
                             for (int x = 0, targetPixelBitPos = pixelOffsets[pass, 0]; x < passWidth; x++, targetPixelBitPos += pixelIntervals[pass, 0])
                             {
-                                int val = (scanline[x / 2] << (x % 2 * 4)) & 0b_11110000;
-                                targetScanline[targetPixelBitPos / 2] |= (byte)(val >> (targetPixelBitPos % 2 * 4));
+                                int val = scanline[x / 2] << x % 2 * 4 & 0b_11110000;
+                                targetScanline[targetPixelBitPos / 2] |= (byte)(val >> targetPixelBitPos % 2 * 4);
                             }
                         }
                         else
@@ -311,7 +311,7 @@ namespace Ridl
         {
             // pngStream position should be at the start of the first IDAT chunk
 
-            using ImageDataReaderStream compressedImageDataStream = new(pngStream, _checkCrc);
+            using PngImageDataReaderStream compressedImageDataStream = new(pngStream, _checkCrc);
             // TODO/NOTE: DeflateStream/ZLibStream is about 20% slower in .net 8 than it is in .net 9
             using ZLibStream decompressor = new(compressedImageDataStream, CompressionMode.Decompress);
             byte[] decodedImageData = info.Interlaced switch
@@ -449,8 +449,20 @@ namespace Ridl
                 throw new Exception($"{nameof(pngStream)} doesn't contain IDAT chunks.");
         }
 
-        public byte[] Decode(Stream pngStream, out PngMetadata info)
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="pngStream">A stream containing the image data. Must support reading.</param>
+        /// <param name="info">Image metadata such as Width, Height, and Bit Depth.</param>
+        /// <param name="stride">Decoded scanline stride.</param>
+        /// <returns>Decoded pixel data.</returns>
+        /// <exception cref="Exception"></exception>
+        /// <exception cref="InvalidDataException"></exception>
+        public byte[] Decode(Stream pngStream, out PngMetadata info, out int stride)
         {
+            if (!pngStream.CanRead)
+                throw new Exception($"{nameof(pngStream)} does not support reading.");
+
             Span<byte> header = stackalloc byte[8];
             pngStream.ReadExactly(header);
 
@@ -462,13 +474,20 @@ namespace Ridl
             if (info.Filter != 0)
                 throw new InvalidDataException("Invalid filter type.");
 
-            if (!BitConverter.IsLittleEndian)
-                throw new NotImplementedException("Big endian systems are not currently supported.");
-
             DecodeChunks(pngStream, info, out byte[] imgData, out var palette, out var transparency, out var pixelDimensions);
             info = info with { Palette = palette, Transparency = transparency, PixelDimensions = pixelDimensions };
 
+            stride = MathHelpers.DivRoundUp(info.Width * info.BitsPerPixel, 8);
             return imgData;
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="pngData">A byte array containing the image data.</param>
+        /// <param name="info">Image metadata such as Width, Height, and Bit Depth.</param>
+        /// <param name="stride">Decoded scanline stride.</param>
+        /// <returns>Decoded pixel data.</returns>
+        public byte[] Decode(byte[] pngData, out PngMetadata info, out int stride) => Decode(new MemoryStream(pngData), out info, out stride);
     }
 }

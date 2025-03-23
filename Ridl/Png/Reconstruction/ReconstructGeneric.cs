@@ -1,11 +1,11 @@
-﻿using Ridl.Filtering;
+﻿using Ridl.Png.Filtering;
 using System.Runtime.Intrinsics;
 
-namespace Ridl.Reconstruction
+namespace Ridl.Png.Reconstruction
 {
     internal class ReconstructGeneric(int bitsPerPixel) : IReconstructor
     {
-        private readonly int _bytesPerPixel = bitsPerPixel < 8 ? 1 : (bitsPerPixel / 8); // 1 when bpp < 8
+        private readonly int _bytesPerPixel = bitsPerPixel < 8 ? 1 : bitsPerPixel / 8; // 1 when bpp < 8
 
         public virtual void FilterSub(Span<byte> scanline)
         {

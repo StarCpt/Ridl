@@ -1,9 +1,9 @@
 ﻿using System.Buffers.Binary;
 using System.IO.Hashing;
 
-namespace Ridl
+namespace Ridl.Png
 {
-    internal class ImageDataReaderStream : Stream
+    internal class PngImageDataReaderStream : Stream
     {
         public override bool CanRead => true;
         public override bool CanSeek => false;
@@ -29,7 +29,7 @@ namespace Ridl
         /// 
         /// </summary>
         /// <param name="baseStream">The position of this stream should be at the start of the first IDAT chunk.</param>
-        public ImageDataReaderStream(Stream baseStream, bool checkCrc)
+        public PngImageDataReaderStream(Stream baseStream, bool checkCrc)
         {
             if (!baseStream.CanRead)
                 throw new Exception($"{nameof(baseStream)} is not readable.");

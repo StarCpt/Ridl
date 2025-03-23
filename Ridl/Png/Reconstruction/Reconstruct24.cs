@@ -1,13 +1,13 @@
-﻿using Ridl.Filtering;
+﻿using Ridl.Png.Filtering;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 
-namespace Ridl.Reconstruction
+namespace Ridl.Png.Reconstruction
 {
-    internal class Reconstruct32() : ReconstructGeneric(BITS_PER_PIXEL), IReconstructor
+    internal class Reconstruct24() : ReconstructGeneric(BITS_PER_PIXEL), IReconstructor
     {
-        private const int BITS_PER_PIXEL = 32;
+        private const int BITS_PER_PIXEL = 24;
 
         public override void FilterSub(Span<byte> scanline)
         {
@@ -17,12 +17,11 @@ namespace Ridl.Reconstruction
             }
             else
             {
-                for (int x = 4; x < scanline.Length; x += 4)
+                for (int x = 3; x < scanline.Length; x += 3)
                 {
-                    scanline[x + 0] += scanline[x - 4];
-                    scanline[x + 1] += scanline[x - 3];
-                    scanline[x + 2] += scanline[x - 2];
-                    scanline[x + 3] += scanline[x - 1];
+                    scanline[x + 0] += scanline[x - 3];
+                    scanline[x + 1] += scanline[x - 2];
+                    scanline[x + 2] += scanline[x - 1];
                 }
             }
         }
@@ -30,24 +29,31 @@ namespace Ridl.Reconstruction
         private static void FilterSubSimd128(Span<byte> scanline)
         {
             Vector128<byte> prev = Vector128.CreateScalarUnsafe<uint>(Unsafe.As<byte, uint>(ref scanline[0])).AsByte();
-            for (int x = 4; x < scanline.Length; x += 4)
+            int x = 3;
+            for (; x < scanline.Length - (4 - 1); x += 3)
             {
                 ref uint currentPixelRef = ref Unsafe.As<byte, uint>(ref scanline[x]);
                 Vector128<byte> current = Vector128.CreateScalarUnsafe<uint>(currentPixelRef).AsByte();
                 current += prev;
-                currentPixelRef = current.AsUInt32()[0];
+                scanline[x + 0] = current[0];
+                scanline[x + 1] = current[1];
+                scanline[x + 2] = current[2];
                 prev = current;
+            }
+
+            for (; x < scanline.Length; x++)
+            {
+                scanline[x] += scanline[x - 3];
             }
         }
 
         public override void FilterAvgScan0(Span<byte> scanline)
         {
-            for (int x = 4; x < scanline.Length; x += 4)
+            for (int x = 3; x < scanline.Length; x += 3)
             {
-                scanline[x + 0] += (byte)(scanline[x - 4] / 2);
-                scanline[x + 1] += (byte)(scanline[x - 3] / 2);
-                scanline[x + 2] += (byte)(scanline[x - 2] / 2);
-                scanline[x + 3] += (byte)(scanline[x - 1] / 2);
+                scanline[x + 0] += (byte)(scanline[x - 3] / 2);
+                scanline[x + 1] += (byte)(scanline[x - 2] / 2);
+                scanline[x + 2] += (byte)(scanline[x - 1] / 2);
             }
         }
 
@@ -56,14 +62,12 @@ namespace Ridl.Reconstruction
             scanline[0] += (byte)(prevScanline[0] / 2);
             scanline[1] += (byte)(prevScanline[1] / 2);
             scanline[2] += (byte)(prevScanline[2] / 2);
-            scanline[3] += (byte)(prevScanline[3] / 2);
 
-            for (int x = 4; x < scanline.Length; x += 4)
+            for (int x = 3; x < scanline.Length; x += 3)
             {
-                scanline[x + 0] += (byte)((scanline[x - 4] + prevScanline[x + 0]) / 2);
-                scanline[x + 1] += (byte)((scanline[x - 3] + prevScanline[x + 1]) / 2);
-                scanline[x + 2] += (byte)((scanline[x - 2] + prevScanline[x + 2]) / 2);
-                scanline[x + 3] += (byte)((scanline[x - 1] + prevScanline[x + 3]) / 2);
+                scanline[x + 0] += (byte)((scanline[x - 3] + prevScanline[x + 0]) / 2);
+                scanline[x + 1] += (byte)((scanline[x - 2] + prevScanline[x + 1]) / 2);
+                scanline[x + 2] += (byte)((scanline[x - 1] + prevScanline[x + 2]) / 2);
             }
         }
 
@@ -82,14 +86,12 @@ namespace Ridl.Reconstruction
                 scanline[0] += prevScanline[0];
                 scanline[1] += prevScanline[1];
                 scanline[2] += prevScanline[2];
-                scanline[3] += prevScanline[3];
 
-                for (int x = 4; x < scanline.Length; x += 4)
+                for (int x = 3; x < scanline.Length; x += 3)
                 {
-                    scanline[x + 0] += FilteringHelpers.PaethPredictor(scanline[x - 4], prevScanline[x + 0], prevScanline[x - 4]);
-                    scanline[x + 1] += FilteringHelpers.PaethPredictor(scanline[x - 3], prevScanline[x + 1], prevScanline[x - 3]);
-                    scanline[x + 2] += FilteringHelpers.PaethPredictor(scanline[x - 2], prevScanline[x + 2], prevScanline[x - 2]);
-                    scanline[x + 3] += FilteringHelpers.PaethPredictor(scanline[x - 1], prevScanline[x + 3], prevScanline[x - 1]);
+                    scanline[x + 0] += FilteringHelpers.PaethPredictor(scanline[x - 3], prevScanline[x + 0], prevScanline[x - 3]);
+                    scanline[x + 1] += FilteringHelpers.PaethPredictor(scanline[x - 2], prevScanline[x + 1], prevScanline[x - 2]);
+                    scanline[x + 2] += FilteringHelpers.PaethPredictor(scanline[x - 1], prevScanline[x + 2], prevScanline[x - 1]);
                 }
             }
         }
@@ -106,10 +108,10 @@ namespace Ridl.Reconstruction
 
             Vector128<int> byteMask = Vector128.Create(0xff);
 
-            for (int x = 0; x < scanline.Length; x += 4)
+            for (int x = 0; x < scanline.Length; x += 3)
             {
-                b = Vector128.Create(prevScanline[x], prevScanline[x + 1], prevScanline[x + 2], prevScanline[x + 3]);
-                t = Vector128.Create(scanline[x], scanline[x + 1], scanline[x + 2], scanline[x + 3]);
+                b = Vector128.Create(prevScanline[x], prevScanline[x + 1], prevScanline[x + 2], 0);
+                t = Vector128.Create(scanline[x], scanline[x + 1], scanline[x + 2], 0);
 
                 Vector128<int> pa4 = b - c;
                 Vector128<int> pb4 = a - c;
@@ -134,7 +136,6 @@ namespace Ridl.Reconstruction
                 scanline[x + 0] = tb[0];
                 scanline[x + 1] = tb[4];
                 scanline[x + 2] = tb[8];
-                scanline[x + 3] = tb[12];
 
                 a = t;
                 c = b;
@@ -152,20 +153,20 @@ namespace Ridl.Reconstruction
             c = Vector128<byte>.Zero;
 
             int x = 0;
-            for (; x < scanline.Length - (16 - 1); x += 4)
+            for (; x < scanline.Length - (16 - 1); x += 3)
             {
                 var t = Vector128.LoadUnsafe(ref scanline[x]);
                 var b = Vector128.LoadUnsafe(in prevScanline[x]);
 
                 var min_ab = Sse2.Min(a, b);
                 var max_ab = Sse2.Max(a, b);
-
+                
                 var pa = Sse2.SubtractSaturate(max_ab, c);
                 var pb = Sse2.SubtractSaturate(c, min_ab);
-
+                
                 var min_pab = Sse2.Min(pa, pb);
                 var pc = Sse2.Subtract(Sse2.Max(pa, pb), min_pab);
-
+                
                 var min_pabc = Sse2.Min(min_pab, pc);
                 var use_a = Sse2.CompareEqual(min_pabc, pa);
                 var use_b = Sse2.CompareEqual(min_pabc, pb);
@@ -177,7 +178,6 @@ namespace Ridl.Reconstruction
                 scanline[x + 0] = t[0];
                 scanline[x + 1] = t[1];
                 scanline[x + 2] = t[2];
-                scanline[x + 3] = t[3];
 
                 a = t;
                 c = b;
@@ -188,16 +188,14 @@ namespace Ridl.Reconstruction
                 scanline[x + 0] += prevScanline[x + 0];
                 scanline[x + 1] += prevScanline[x + 1];
                 scanline[x + 2] += prevScanline[x + 2];
-                scanline[x + 3] += prevScanline[x + 3];
-                x += 4;
+                x += 3;
             }
 
-            for (; x < scanline.Length; x += 4)
+            for (; x < scanline.Length; x += 3)
             {
-                scanline[x + 0] += FilteringHelpers.PaethPredictor(scanline[x - 4], prevScanline[x + 0], prevScanline[x - 4]);
-                scanline[x + 1] += FilteringHelpers.PaethPredictor(scanline[x - 3], prevScanline[x + 1], prevScanline[x - 3]);
-                scanline[x + 2] += FilteringHelpers.PaethPredictor(scanline[x - 2], prevScanline[x + 2], prevScanline[x - 2]);
-                scanline[x + 3] += FilteringHelpers.PaethPredictor(scanline[x - 1], prevScanline[x + 3], prevScanline[x - 1]);
+                scanline[x + 0] += FilteringHelpers.PaethPredictor(scanline[x - 3], prevScanline[x + 0], prevScanline[x - 3]);
+                scanline[x + 1] += FilteringHelpers.PaethPredictor(scanline[x - 2], prevScanline[x + 1], prevScanline[x - 2]);
+                scanline[x + 2] += FilteringHelpers.PaethPredictor(scanline[x - 1], prevScanline[x + 2], prevScanline[x - 1]);
             }
         }
     }

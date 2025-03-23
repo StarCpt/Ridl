@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Ridl.Filtering
+namespace Ridl.Png.Filtering
 {
     public static class FilteringHelpers
     {

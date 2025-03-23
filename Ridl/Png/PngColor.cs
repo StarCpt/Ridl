@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace Ridl
+namespace Ridl.Png
 {
     [StructLayout(LayoutKind.Explicit)]
     [DebuggerDisplay("{R}, {G}, {B}")]

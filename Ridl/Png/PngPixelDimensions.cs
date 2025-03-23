@@ -1,4 +1,4 @@
-﻿namespace Ridl
+﻿namespace Ridl.Png
 {
     public readonly struct PngPixelDimensions
     {
