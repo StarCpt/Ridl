@@ -79,7 +79,7 @@ namespace SharpPng
             {
                 Width = (int)BinaryPrimitives.ReadUInt32BigEndian(headerData[..4]),
                 Height = (int)BinaryPrimitives.ReadUInt32BigEndian(headerData[4..8]),
-                BitDepth = headerData![8],
+                BitDepth = headerData[8],
                 Format = (PngPixelFormat)headerData[9],
                 Compression = (PngCompressionMethod)headerData[10],
                 Filter = headerData[11],
