@@ -27,9 +27,6 @@ namespace SharpPng
         public PngDecoder(bool checkCrc)
         {
             _checkCrc = checkCrc;
-
-            if (checkCrc)
-                throw new NotImplementedException();
         }
 
         private static bool CheckSignature(ReadOnlySpan<byte> bytes)

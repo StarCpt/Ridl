@@ -1,4 +1,5 @@
 ﻿using System.Buffers.Binary;
+using System.IO.Hashing;
 
 namespace SharpPng
 {
@@ -21,6 +22,8 @@ namespace SharpPng
         private bool _endOfImageData = false;
 
         private readonly Stream _baseStream;
+        private readonly bool _checkCrc;
+        private readonly Crc32 _crc = new(); // crc for the current chunk. accumulated value is checked when the end of the chunk is reached
 
         /// <summary>
         /// 
@@ -31,10 +34,8 @@ namespace SharpPng
             if (!baseStream.CanRead)
                 throw new Exception($"{nameof(baseStream)} is not readable.");
 
-            if (checkCrc)
-                throw new NotImplementedException();
-
             _baseStream = baseStream;
+            _checkCrc = checkCrc;
 
             ReadNextChunkHeader();
         }
@@ -52,6 +53,10 @@ namespace SharpPng
             // read chunk type
             _baseStream.ReadExactly(buffer);
             var chunkType = new ChunkType(buffer);
+
+            // crc includes chunk type but not length
+            if (_checkCrc)
+                _crc.Append(buffer);
 
             _endOfImageData = chunkType != ChunkType.ImageData;
         }
@@ -78,7 +83,11 @@ namespace SharpPng
                 int availableChunkDataBytes = _currentChunkDataLength - _currentChunkDataPosition;
                 if (availableChunkDataBytes <= 0)
                 {
-                    ReadChunkCrc(); // Advance base stream position to the start of the next chunk
+                    uint chunkCrc = ReadChunkCrc(); // Advance base stream position to the start of the next chunk
+                    if (_checkCrc && _crc.GetCurrentHashAsUInt32() != chunkCrc)
+                        throw new Exception("CRC does not match.");
+                    _crc.Reset();
+
                     ReadNextChunkHeader();
                     continue;
                 }
@@ -86,6 +95,9 @@ namespace SharpPng
                 int bytesToRead = Math.Min(availableChunkDataBytes, count - readBytes);
                 Span<byte> bufferSlice = buffer.AsSpan(offset + readBytes, bytesToRead);
                 _baseStream.ReadExactly(bufferSlice);
+
+                if (_checkCrc)
+                    _crc.Append(bufferSlice);
 
                 _currentChunkDataPosition += bytesToRead;
                 readBytes += bytesToRead;
