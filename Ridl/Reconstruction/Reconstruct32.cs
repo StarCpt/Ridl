@@ -1,9 +1,9 @@
-﻿using SharpPng.Filtering;
+﻿using Ridl.Filtering;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 
-namespace SharpPng.Reconstruction
+namespace Ridl.Reconstruction
 {
     internal class Reconstruct32 : IReconstructor
     {

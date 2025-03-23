@@ -1,4 +1,4 @@
-﻿namespace SharpPng
+﻿namespace Ridl
 {
     public enum PngPixelFormat : byte
     {

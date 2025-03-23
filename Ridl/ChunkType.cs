@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace SharpPng
+namespace Ridl
 {
     internal readonly struct ChunkType
     {

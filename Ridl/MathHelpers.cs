@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SharpPng
+namespace Ridl
 {
     public static class MathHelpers
     {

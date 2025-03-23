@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SharpPng.Filtering
+namespace Ridl.Filtering
 {
     public static class FilteringHelpers
     {

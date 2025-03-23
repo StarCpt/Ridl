@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace SharpPng.Wpf
+namespace Ridl.Wpf
 {
-    public static class PngSharpWpfExtensions
+    public static class RidlWpfExtensions
     {
         public static BitmapSource DecodeToBitmapSource(this PngDecoder decoder, Stream pngStream)
         {

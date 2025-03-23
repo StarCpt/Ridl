@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SharpPng\SharpPng.csproj" />
+    <ProjectReference Include="..\Ridl\Ridl.csproj" />
   </ItemGroup>
 
 </Project>

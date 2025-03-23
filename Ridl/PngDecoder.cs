@@ -1,4 +1,4 @@
-﻿using SharpPng.Reconstruction;
+﻿using Ridl.Reconstruction;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
@@ -6,7 +6,7 @@ using System.IO.Compression;
 using System.IO.Hashing;
 using System.Runtime.InteropServices;
 
-namespace SharpPng
+namespace Ridl
 {
     public class PngDecoder
     {

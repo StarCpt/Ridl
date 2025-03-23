@@ -1,4 +1,4 @@
-﻿namespace SharpPng
+﻿namespace Ridl
 {
     /// <summary>
     /// From <see href="https://stackoverflow.com/a/28036366" />

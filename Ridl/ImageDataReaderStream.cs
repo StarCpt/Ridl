@@ -1,7 +1,7 @@
 ﻿using System.Buffers.Binary;
 using System.IO.Hashing;
 
-namespace SharpPng
+namespace Ridl
 {
     internal class ImageDataReaderStream : Stream
     {

@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace SharpPng
+namespace Ridl
 {
     [StructLayout(LayoutKind.Explicit)]
     [DebuggerDisplay("{R}, {G}, {B}")]
