@@ -1,4 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
+using Ridl.Png;
 
 namespace Ridl.Benchmark
 {
@@ -25,7 +26,7 @@ namespace Ridl.Benchmark
         public void RidlDecode()
         {
             using var pngStream = GetPngStream();
-            byte[] imgData = Ridl.PngDecoder.Default.Decode(pngStream, out var info);
+            byte[] imgData = PngDecoder.Default.Decode(pngStream, out PngMetadata info, out int stride);
         }
 
         [Benchmark]

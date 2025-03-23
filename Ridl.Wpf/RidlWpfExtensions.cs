@@ -9,7 +9,7 @@ namespace Ridl.Wpf
     {
         public static BitmapSource DecodeToBitmapSource(this PngDecoder decoder, Stream pngStream)
         {
-            byte[] imageBytes = decoder.Decode(pngStream, out PngMetadata info);
+            byte[] imageBytes = decoder.Decode(pngStream, out PngMetadata info, out int stride);
 
             PixelFormat format;
             BitmapPalette? palette = null;
@@ -256,7 +256,6 @@ namespace Ridl.Wpf
                 }
             }
 
-            int stride = MathHelpers.DivRoundUp(info.Width * format.BitsPerPixel, 8);
             BitmapSource bitmap = BitmapSource.Create(info.Width, info.Height, dpiX, dpiY, format, palette, imageBytes, stride);
             return bitmap;
         }
