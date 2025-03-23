@@ -5,18 +5,11 @@ using System.Runtime.Intrinsics.X86;
 
 namespace Ridl.Reconstruction
 {
-    internal class Reconstruct24 : IReconstructor
+    internal class Reconstruct24() : ReconstructGeneric(BITS_PER_PIXEL), IReconstructor
     {
-        private readonly int _imageStride;
-        private readonly ReconstructGeneric _generic;
+        private const int BITS_PER_PIXEL = 24;
 
-        public Reconstruct24(int imageWidth)
-        {
-            _imageStride = imageWidth * 3;
-            _generic = new ReconstructGeneric(imageWidth, 24);
-        }
-
-        public void FilterSub(Span<byte> scanline)
+        public override void FilterSub(Span<byte> scanline)
         {
             if (Vector128.IsHardwareAccelerated)
             {
@@ -24,7 +17,7 @@ namespace Ridl.Reconstruction
             }
             else
             {
-                for (int x = 3; x < _imageStride; x += 3)
+                for (int x = 3; x < scanline.Length; x += 3)
                 {
                     scanline[x + 0] += scanline[x - 3];
                     scanline[x + 1] += scanline[x - 2];
@@ -33,11 +26,11 @@ namespace Ridl.Reconstruction
             }
         }
 
-        private void FilterSubSimd128(Span<byte> scanline)
+        private static void FilterSubSimd128(Span<byte> scanline)
         {
             Vector128<byte> prev = Vector128.CreateScalarUnsafe<uint>(Unsafe.As<byte, uint>(ref scanline[0])).AsByte();
             int x = 3;
-            for (; x <= _imageStride - 4; x += 3)
+            for (; x < scanline.Length - (4 - 1); x += 3)
             {
                 ref uint currentPixelRef = ref Unsafe.As<byte, uint>(ref scanline[x]);
                 Vector128<byte> current = Vector128.CreateScalarUnsafe<uint>(currentPixelRef).AsByte();
@@ -48,20 +41,15 @@ namespace Ridl.Reconstruction
                 prev = current;
             }
 
-            for (; x < _imageStride; x++)
+            for (; x < scanline.Length; x++)
             {
                 scanline[x] += scanline[x - 3];
             }
         }
 
-        public void FilterUp(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        public override void FilterAvgScan0(Span<byte> scanline)
         {
-            _generic.FilterUp(scanline, prevScanline);
-        }
-
-        public void FilterAvg_Scan0(Span<byte> scanline)
-        {
-            for (int x = 3; x < _imageStride; x += 3)
+            for (int x = 3; x < scanline.Length; x += 3)
             {
                 scanline[x + 0] += (byte)(scanline[x - 3] / 2);
                 scanline[x + 1] += (byte)(scanline[x - 2] / 2);
@@ -69,13 +57,13 @@ namespace Ridl.Reconstruction
             }
         }
 
-        public void FilterAvg(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        public override void FilterAvg(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
         {
             scanline[0] += (byte)(prevScanline[0] / 2);
             scanline[1] += (byte)(prevScanline[1] / 2);
             scanline[2] += (byte)(prevScanline[2] / 2);
 
-            for (int x = 3; x < _imageStride; x += 3)
+            for (int x = 3; x < scanline.Length; x += 3)
             {
                 scanline[x + 0] += (byte)((scanline[x - 3] + prevScanline[x + 0]) / 2);
                 scanline[x + 1] += (byte)((scanline[x - 2] + prevScanline[x + 1]) / 2);
@@ -83,16 +71,15 @@ namespace Ridl.Reconstruction
             }
         }
 
-        public void FilterPaeth_Scan0(Span<byte> scanline) => FilterSub(scanline);
-
-        public void FilterPaeth(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        public override void FilterPaeth(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
         {
-            if (Vector128.IsHardwareAccelerated)
+            if (Sse41.IsSupported)
             {
-                if (Sse41.IsSupported)
-                    FilterPaethSimd128_Sse41(scanline, prevScanline);
-                else
-                    FilterPaethSimd128(scanline, prevScanline);
+                FilterPaethSse41(scanline, prevScanline);
+            }
+            else if (Vector128.IsHardwareAccelerated)
+            {
+                FilterPaethSimd128(scanline, prevScanline);
             }
             else
             {
@@ -100,7 +87,7 @@ namespace Ridl.Reconstruction
                 scanline[1] += prevScanline[1];
                 scanline[2] += prevScanline[2];
 
-                for (int x = 3; x < _imageStride; x += 3)
+                for (int x = 3; x < scanline.Length; x += 3)
                 {
                     scanline[x + 0] += FilteringHelpers.PaethPredictor(scanline[x - 3], prevScanline[x + 0], prevScanline[x - 3]);
                     scanline[x + 1] += FilteringHelpers.PaethPredictor(scanline[x - 2], prevScanline[x + 1], prevScanline[x - 2]);
@@ -109,7 +96,7 @@ namespace Ridl.Reconstruction
             }
         }
 
-        private void FilterPaethSimd128(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        private static void FilterPaethSimd128(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
         {
             // a = corresponding byte in left pixel
             // b = byte directly above
@@ -121,7 +108,7 @@ namespace Ridl.Reconstruction
 
             Vector128<int> byteMask = Vector128.Create(0xff);
 
-            for (int x = 0; x < _imageStride; x += 3)
+            for (int x = 0; x < scanline.Length; x += 3)
             {
                 b = Vector128.Create(prevScanline[x], prevScanline[x + 1], prevScanline[x + 2], 0);
                 t = Vector128.Create(scanline[x], scanline[x + 1], scanline[x + 2], 0);
@@ -155,7 +142,7 @@ namespace Ridl.Reconstruction
             }
         }
 
-        private void FilterPaethSimd128_Sse41(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        private static void FilterPaethSse41(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
         {
             // a = corresponding byte in left pixel
             // b = byte directly above
@@ -166,7 +153,7 @@ namespace Ridl.Reconstruction
             c = Vector128<byte>.Zero;
 
             int x = 0;
-            for (; x < _imageStride - (16 - 1); x += 3)
+            for (; x < scanline.Length - (16 - 1); x += 3)
             {
                 var t = Vector128.LoadUnsafe(ref scanline[x]);
                 var b = Vector128.LoadUnsafe(in prevScanline[x]);
@@ -204,7 +191,7 @@ namespace Ridl.Reconstruction
                 x += 3;
             }
 
-            for (; x < _imageStride; x += 3)
+            for (; x < scanline.Length; x += 3)
             {
                 scanline[x + 0] += FilteringHelpers.PaethPredictor(scanline[x - 3], prevScanline[x + 0], prevScanline[x - 3]);
                 scanline[x + 1] += FilteringHelpers.PaethPredictor(scanline[x - 2], prevScanline[x + 1], prevScanline[x - 2]);

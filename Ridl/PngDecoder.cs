@@ -119,7 +119,7 @@ namespace Ridl
                 average++;
 #endif
                 if (y is 0)
-                    recon.FilterAvg_Scan0(scanline);
+                    recon.FilterAvgScan0(scanline);
                 else
                     recon.FilterAvg(scanline, prevScanline);
             }
@@ -129,7 +129,7 @@ namespace Ridl
                 paeth++;
 #endif
                 if (y is 0)
-                    recon.FilterPaeth_Scan0(scanline);
+                    recon.FilterPaethScan0(scanline);
                 else
                     recon.FilterPaeth(scanline, prevScanline);
             }
@@ -142,9 +142,9 @@ namespace Ridl
 
             IReconstructor recon = info.BitsPerPixel switch
             {
-                24 => new Reconstruct24(info.Width),
-                32 => new Reconstruct32(info.Width),
-                _ => new ReconstructGeneric(info.Width, info.BitsPerPixel),
+                24 => new Reconstruct24(),
+                32 => new Reconstruct32(),
+                _ => new ReconstructGeneric(info.BitsPerPixel),
             };
 
             for (int y = 0; y < info.Height; y++)
@@ -227,9 +227,9 @@ namespace Ridl
 
                 IReconstructor recon = info.BitsPerPixel switch
                 {
-                    24 => new Reconstruct24(passWidth),
-                    32 => new Reconstruct32(passWidth),
-                    _ => new ReconstructGeneric(passWidth, info.BitsPerPixel),
+                    24 => new Reconstruct24(),
+                    32 => new Reconstruct32(),
+                    _ => new ReconstructGeneric(info.BitsPerPixel),
                 };
 
                 byte[] prevScanline = new byte[passStride];

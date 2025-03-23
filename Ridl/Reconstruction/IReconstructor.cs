@@ -10,9 +10,9 @@ namespace Ridl.Reconstruction
     {
         void FilterSub(Span<byte> scanline);
         void FilterUp(Span<byte> scanline, ReadOnlySpan<byte> prevScan);
-        void FilterAvg_Scan0(Span<byte> scanline);
+        void FilterAvgScan0(Span<byte> scanline);
         void FilterAvg(Span<byte> scanline, ReadOnlySpan<byte> prevScan);
-        void FilterPaeth_Scan0(Span<byte> scanline);
+        void FilterPaethScan0(Span<byte> scanline);
         void FilterPaeth(Span<byte> scanline, ReadOnlySpan<byte> prevScan);
     }
 }
