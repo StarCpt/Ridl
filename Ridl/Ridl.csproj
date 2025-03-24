@@ -20,6 +20,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Ridl.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\LICENSE.txt">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>

@@ -474,6 +474,9 @@ namespace Ridl.Png
             if (info.Filter != 0)
                 throw new InvalidDataException("Invalid filter type.");
 
+            if (info.Width <= 0 || info.Height <= 0)
+                throw new InvalidDataException("Invalid image size; The image may be corrupt.");
+
             DecodeChunks(pngStream, info, out byte[] imgData, out var palette, out var transparency, out var pixelDimensions);
             info = info with { Palette = palette, Transparency = transparency, PixelDimensions = pixelDimensions };
 

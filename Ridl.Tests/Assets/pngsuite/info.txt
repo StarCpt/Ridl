@@ -1,0 +1,1 @@
+The png files in this directory were downloaded from http://www.libpng.org/pub/png/pngsuite.html, a copy of Willem van Schaik's suite of png images for testing.
