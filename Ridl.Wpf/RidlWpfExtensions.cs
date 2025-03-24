@@ -257,6 +257,7 @@ namespace Ridl.Wpf
                 }
             }
 
+            stride = MathHelpers.DivRoundUp(info.Width * format.BitsPerPixel, 8);
             BitmapSource bitmap = BitmapSource.Create(info.Width, info.Height, dpiX, dpiY, format, palette, imageBytes, stride);
             return bitmap;
         }
