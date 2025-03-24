@@ -29,14 +29,26 @@ namespace Ridl.Png.Reconstruction
 
         private static void FilterSubSimd128(Span<byte> scanline)
         {
-            Vector128<byte> prev = Vector128.CreateScalarUnsafe<uint>(Unsafe.As<byte, uint>(ref scanline[0])).AsByte();
-            for (int x = 4; x < scanline.Length; x += 4)
+            Vector128<byte> prev = Vector128<byte>.Zero;
+            int x = 0;
+            for (; x < scanline.Length - (16 - 1); x += 4)
             {
                 ref uint currentPixelRef = ref Unsafe.As<byte, uint>(ref scanline[x]);
-                Vector128<byte> current = Vector128.CreateScalarUnsafe<uint>(currentPixelRef).AsByte();
+                Vector128<byte> current = Vector128.LoadUnsafe(ref scanline[x]);
                 current += prev;
                 currentPixelRef = current.AsUInt32()[0];
                 prev = current;
+            }
+
+            if (x == 0)
+                x = 4;
+
+            for (; x < scanline.Length; x += 4)
+            {
+                scanline[x + 0] += scanline[x - 4];
+                scanline[x + 1] += scanline[x - 3];
+                scanline[x + 2] += scanline[x - 2];
+                scanline[x + 3] += scanline[x - 1];
             }
         }
 
@@ -53,12 +65,48 @@ namespace Ridl.Png.Reconstruction
 
         public override void FilterAvg(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
         {
-            scanline[0] += (byte)(prevScanline[0] / 2);
-            scanline[1] += (byte)(prevScanline[1] / 2);
-            scanline[2] += (byte)(prevScanline[2] / 2);
-            scanline[3] += (byte)(prevScanline[3] / 2);
+            if (Sse2.IsSupported)
+            {
+                FilterAvgSse2(scanline, prevScanline);
+            }
+            else
+            {
+                scanline[0] += (byte)(prevScanline[0] / 2);
+                scanline[1] += (byte)(prevScanline[1] / 2);
+                scanline[2] += (byte)(prevScanline[2] / 2);
+                scanline[3] += (byte)(prevScanline[3] / 2);
 
-            for (int x = 4; x < scanline.Length; x += 4)
+                for (int x = 4; x < scanline.Length; x += 4)
+                {
+                    scanline[x + 0] += (byte)((scanline[x - 4] + prevScanline[x + 0]) / 2);
+                    scanline[x + 1] += (byte)((scanline[x - 3] + prevScanline[x + 1]) / 2);
+                    scanline[x + 2] += (byte)((scanline[x - 2] + prevScanline[x + 2]) / 2);
+                    scanline[x + 3] += (byte)((scanline[x - 1] + prevScanline[x + 3]) / 2);
+                }
+            }
+        }
+
+        private static void FilterAvgSse2(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        {
+            Vector128<byte> left = Vector128<byte>.Zero;
+            int x = 0;
+            for (; x < scanline.Length - (16 - 1); x += 4)
+            {
+                ref uint currentPixelRef = ref Unsafe.As<byte, uint>(ref scanline[x]);
+                Vector128<byte> current = Vector128.LoadUnsafe(ref scanline[x]);
+                Vector128<byte> above = Vector128.LoadUnsafe(in prevScanline[x]);
+
+                var above_left_avg = Sse2.Subtract(Sse2.Add(above, left), Sse2.Average(above, left));
+                current = Sse2.Add(above_left_avg, current);
+
+                currentPixelRef = current.AsUInt32()[0];
+                left = current;
+            }
+
+            if (x == 0)
+                x = 4;
+
+            for (; x < scanline.Length; x += 4)
             {
                 scanline[x + 0] += (byte)((scanline[x - 4] + prevScanline[x + 0]) / 2);
                 scanline[x + 1] += (byte)((scanline[x - 3] + prevScanline[x + 1]) / 2);

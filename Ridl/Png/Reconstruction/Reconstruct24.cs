@@ -28,12 +28,11 @@ namespace Ridl.Png.Reconstruction
 
         private static void FilterSubSimd128(Span<byte> scanline)
         {
-            Vector128<byte> prev = Vector128.CreateScalarUnsafe<uint>(Unsafe.As<byte, uint>(ref scanline[0])).AsByte();
-            int x = 3;
-            for (; x < scanline.Length - (4 - 1); x += 3)
+            Vector128<byte> prev = Vector128<byte>.Zero;
+            int x = 0;
+            for (; x < scanline.Length - (16 - 1); x += 3)
             {
-                ref uint currentPixelRef = ref Unsafe.As<byte, uint>(ref scanline[x]);
-                Vector128<byte> current = Vector128.CreateScalarUnsafe<uint>(currentPixelRef).AsByte();
+                Vector128<byte> current = Vector128.LoadUnsafe(ref scanline[x]);
                 current += prev;
                 scanline[x + 0] = current[0];
                 scanline[x + 1] = current[1];
@@ -41,9 +40,14 @@ namespace Ridl.Png.Reconstruction
                 prev = current;
             }
 
-            for (; x < scanline.Length; x++)
+            if (x == 0)
+                x = 3;
+
+            for (; x < scanline.Length; x += 3)
             {
-                scanline[x] += scanline[x - 3];
+                scanline[x + 0] += scanline[x - 3];
+                scanline[x + 1] += scanline[x - 2];
+                scanline[x + 2] += scanline[x - 1];
             }
         }
 
@@ -59,11 +63,47 @@ namespace Ridl.Png.Reconstruction
 
         public override void FilterAvg(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
         {
-            scanline[0] += (byte)(prevScanline[0] / 2);
-            scanline[1] += (byte)(prevScanline[1] / 2);
-            scanline[2] += (byte)(prevScanline[2] / 2);
+            if (Sse2.IsSupported)
+            {
+                FilterAvgSse2(scanline, prevScanline);
+            }
+            else
+            {
+                scanline[0] += (byte)(prevScanline[0] / 2);
+                scanline[1] += (byte)(prevScanline[1] / 2);
+                scanline[2] += (byte)(prevScanline[2] / 2);
 
-            for (int x = 3; x < scanline.Length; x += 3)
+                for (int x = 3; x < scanline.Length; x += 3)
+                {
+                    scanline[x + 0] += (byte)((scanline[x - 3] + prevScanline[x + 0]) / 2);
+                    scanline[x + 1] += (byte)((scanline[x - 2] + prevScanline[x + 1]) / 2);
+                    scanline[x + 2] += (byte)((scanline[x - 1] + prevScanline[x + 2]) / 2);
+                }
+            }
+        }
+
+        private static void FilterAvgSse2(Span<byte> scanline, ReadOnlySpan<byte> prevScanline)
+        {
+            Vector128<byte> left = Vector128<byte>.Zero;
+            int x = 0;
+            for (; x < scanline.Length - (16 - 1); x += 3)
+            {
+                Vector128<byte> current = Vector128.LoadUnsafe(ref scanline[x]);
+                Vector128<byte> above = Vector128.LoadUnsafe(in prevScanline[x]);
+
+                var above_left_avg = Sse2.Subtract(Sse2.Add(above, left), Sse2.Average(above, left));
+                current = Sse2.Add(above_left_avg, current);
+
+                scanline[x + 0] = current[0];
+                scanline[x + 1] = current[1];
+                scanline[x + 2] = current[2];
+                left = current;
+            }
+
+            if (x == 0)
+                x = 3;
+
+            for (; x < scanline.Length; x += 3)
             {
                 scanline[x + 0] += (byte)((scanline[x - 3] + prevScanline[x + 0]) / 2);
                 scanline[x + 1] += (byte)((scanline[x - 2] + prevScanline[x + 1]) / 2);
@@ -160,7 +200,7 @@ namespace Ridl.Png.Reconstruction
 
                 var min_ab = Sse2.Min(a, b);
                 var max_ab = Sse2.Max(a, b);
-                
+
                 var pa = Sse2.SubtractSaturate(max_ab, c);
                 var pb = Sse2.SubtractSaturate(c, min_ab);
                 
@@ -170,7 +210,7 @@ namespace Ridl.Png.Reconstruction
                 var min_pabc = Sse2.Min(min_pab, pc);
                 var use_a = Sse2.CompareEqual(min_pabc, pa);
                 var use_b = Sse2.CompareEqual(min_pabc, pb);
-
+                
                 var pr = Sse41.BlendVariable(Sse41.BlendVariable(c, max_ab, use_b), min_ab, use_a);
 
                 t = Sse2.Add(t, pr);
