@@ -4,12 +4,15 @@
     {
         public int Width { get; init; }
         public int Height { get; init; }
-        public int BitDepth { get; init; } // 1, 2, 4, 8, 16
+        /// <remarks>1, 2, 4, 8, or 16.</remarks>
+        public int BitDepth { get; init; }
         public PngPixelFormat Format { get; init; }
-        internal PngCompressionMethod Compression { get; init; } // always 0
-        internal byte Filter { get; init; } // always 0
+        /// <remarks>Always 0.</remarks>
+        internal PngCompressionMethod Compression { get; init; }
+        /// <remarks>Always 0.</remarks>
+        internal byte Filter { get; init; }
         public bool Interlaced { get; init; }
-        public PngColor[]? Palette { get; init; }
+        public PngPaletteColor[]? Palette { get; init; }
         public PngTransparency? Transparency { get; init; }
         public PngPixelDimensions? PixelDimensions { get; init; }
 

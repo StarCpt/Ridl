@@ -331,7 +331,7 @@ namespace Ridl.Png
             return decodedImageData;
         }
 
-        private void DecodeChunks(Stream pngStream, in PngMetadata info, [NotNull] out byte[]? imageData, out PngColor[]? palette, out PngTransparency? transparency, out PngPixelDimensions? pixelDimensions)
+        private void DecodeChunks(Stream pngStream, in PngMetadata info, [NotNull] out byte[]? imageData, out PngPaletteColor[]? palette, out PngTransparency? transparency, out PngPixelDimensions? pixelDimensions)
         {
             imageData = null;
             palette = null;
@@ -373,7 +373,7 @@ namespace Ridl.Png
                     if (length % 3 != 0)
                         throw new Exception("Invalid PLTE chunk length; Length must be divisible by 3.");
 
-                    palette = new PngColor[length / 3];
+                    palette = new PngPaletteColor[length / 3];
                     Span<byte> flattenedPalette = MemoryMarshal.AsBytes(palette.AsSpan());
                     data.CopyTo(flattenedPalette);
                 }
