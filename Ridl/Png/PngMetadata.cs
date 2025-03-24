@@ -6,8 +6,8 @@
         public int Height { get; init; }
         public int BitDepth { get; init; } // 1, 2, 4, 8, 16
         public PngPixelFormat Format { get; init; }
-        public PngCompressionMethod Compression { get; init; } // always 0
-        public byte Filter { get; init; } // always 0
+        internal PngCompressionMethod Compression { get; init; } // always 0
+        internal byte Filter { get; init; } // always 0
         public bool Interlaced { get; init; }
         public PngColor[]? Palette { get; init; }
         public PngTransparency? Transparency { get; init; }
