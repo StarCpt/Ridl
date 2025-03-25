@@ -11,7 +11,15 @@ namespace Ridl.Png.Reconstruction
 
         public override void FilterSub(Span<byte> scanline)
         {
-            if (Vector128.IsHardwareAccelerated)
+            if (Avx2.IsSupported)
+            {
+                FilterSubAvx2(scanline);
+            }
+            else if (Avx.IsSupported)
+            {
+                FilterSubAvx(scanline);
+            }
+            else if (Vector128.IsHardwareAccelerated)
             {
                 FilterSubSimd128(scanline);
             }
@@ -38,6 +46,74 @@ namespace Ridl.Png.Reconstruction
                 current += prev;
                 currentPixelRef = current.AsUInt32()[0];
                 prev = current;
+            }
+
+            if (x == 0)
+                x = 4;
+
+            for (; x < scanline.Length; x += 4)
+            {
+                scanline[x + 0] += scanline[x - 4];
+                scanline[x + 1] += scanline[x - 3];
+                scanline[x + 2] += scanline[x - 2];
+                scanline[x + 3] += scanline[x - 1];
+            }
+        }
+
+        private static void FilterSubAvx(Span<byte> scanline)
+        {
+            Vector128<byte> prev = Vector128<byte>.Zero;
+            int x = 0;
+            var permuteBroadcastLastInt = Vector128.Create(3, 3, 3, 3);
+            for (; x < scanline.Length - (16 - 1); x += 16)
+            {
+                Vector128<byte> current = Vector128.LoadUnsafe(ref scanline[x]);
+
+                // parallel prefix sum
+                current = Sse2.Add(current, Sse2.ShiftLeftLogical128BitLane(current, 4));
+                current = Sse2.Add(current, Sse2.ShiftLeftLogical128BitLane(current, 8));
+
+                current = Sse2.Add(current, prev);
+
+                Vector128.StoreUnsafe(current, ref scanline[x]);
+                prev = Avx.PermuteVar(current.AsSingle(), permuteBroadcastLastInt).AsByte();
+            }
+
+            if (x == 0)
+                x = 4;
+
+            for (; x < scanline.Length; x += 4)
+            {
+                scanline[x + 0] += scanline[x - 4];
+                scanline[x + 1] += scanline[x - 3];
+                scanline[x + 2] += scanline[x - 2];
+                scanline[x + 3] += scanline[x - 1];
+            }
+        }
+
+        private static void FilterSubAvx2(Span<byte> scanline)
+        {
+            Vector256<byte> prev = Vector256<byte>.Zero;
+            int x = 0;
+            var lowMask = Vector256.Create(0, 0, 0, 0, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff).AsInt32();
+            for (; x < scanline.Length - (32 - 1); x += 32)
+            {
+                Vector256<byte> current = Vector256.LoadUnsafe(ref scanline[x]);
+
+                // parallel prefix sum (2 x 128 bit lanes)
+                current = Avx2.Add(current, Avx2.ShiftLeftLogical128BitLane(current, 4));
+                current = Avx2.Add(current, Avx2.ShiftLeftLogical128BitLane(current, 8));
+
+                // add lane 0's accum to lane 1
+                var lane0AccumInLane1 = Avx2.And(Avx2.PermuteVar8x32(current.AsInt32(), Vector256.Create(3)), lowMask);
+                current = Avx2.Add(current, lane0AccumInLane1.AsByte());
+
+                // accumulate prev
+                current = Avx2.Add(current, prev);
+
+                Vector256.StoreUnsafe(current, ref scanline[x]);
+                // broadcast the last int32
+                prev = Avx2.PermuteVar8x32(current.AsInt32(), Vector256.Create(7)).AsByte();
             }
 
             if (x == 0)

@@ -281,7 +281,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan32));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
@@ -293,7 +293,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan32));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
@@ -305,7 +305,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan32));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
@@ -317,7 +317,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan32));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
@@ -347,7 +347,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan24));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
@@ -359,7 +359,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan24));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
@@ -371,7 +371,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan24));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
@@ -383,7 +383,7 @@ namespace Ridl.Tests
 
                 Assert.IsTrue(scanGeneric.SequenceEqual(scan24));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is not AssertFailedException)
             {
                 Assert.Fail(e.ToString());
             }
