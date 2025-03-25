@@ -47,4 +47,20 @@
         /// </remarks>
         Rgba = 6,
     }
+
+    public static class PngPixelFormatExtensions
+    {
+        public static int GetChannels(this PngPixelFormat format)
+        {
+            return format switch
+            {
+                PngPixelFormat.Grayscale => 1,
+                PngPixelFormat.Rgb => 3,
+                PngPixelFormat.Indexed => 1,
+                PngPixelFormat.GrayscaleWithAlpha => 2,
+                PngPixelFormat.Rgba => 4,
+                _ => throw new Exception("Unknown pixel format."),
+            };
+        }
+    }
 }

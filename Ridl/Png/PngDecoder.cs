@@ -63,8 +63,14 @@ namespace Ridl.Png
             pngStream.ReadExactly(buffer);
             int length = (int)BinaryPrimitives.ReadUInt32BigEndian(buffer);
 
+            if (length != 13)
+                throw new InvalidDataException("Invalid header chunk length.");
+
             pngStream.ReadExactly(buffer);
             ChunkType type = new(buffer);
+
+            if (type != ChunkType.Header)
+                throw new InvalidDataException("Header chunk not found.");
 
             Span<byte> headerData = stackalloc byte[length];
             pngStream.ReadExactly(headerData);
@@ -80,7 +86,7 @@ namespace Ridl.Png
                 Format = (PngPixelFormat)headerData[9],
                 Compression = (PngCompressionMethod)headerData[10],
                 Filter = headerData[11],
-                Interlaced = headerData[12] != 0,
+                Interlace = (PngInterlaceMethod)headerData[12],
             };
         }
 
@@ -314,10 +320,11 @@ namespace Ridl.Png
             using PngImageDataReaderStream compressedImageDataStream = new(pngStream, _checkCrc);
             // TODO/NOTE: DeflateStream/ZLibStream is about 20% slower in .net 8 than it is in .net 9
             using ZLibStream decompressor = new(compressedImageDataStream, CompressionMode.Decompress);
-            byte[] decodedImageData = info.Interlaced switch
+            byte[] decodedImageData = info.Interlace switch
             {
-                false => DecodeImageData(decompressor, info),
-                true => DecodeInterlacedImageData(decompressor, info),
+                PngInterlaceMethod.None => DecodeImageData(decompressor, info),
+                PngInterlaceMethod.Adam7 => DecodeInterlacedImageData(decompressor, info),
+                _ => throw new ArgumentException("Unknown interlace method"),
             };
 
             // when ImageDataReaderStream finishes reading, the position is at the end of the chunkType value of the chunk after the last IDAT chunk
@@ -453,12 +460,11 @@ namespace Ridl.Png
         /// 
         /// </summary>
         /// <param name="pngStream">A stream containing the image data. Must support reading.</param>
-        /// <param name="info">Image metadata such as Width, Height, and Bit Depth.</param>
-        /// <param name="stride">Decoded scanline stride.</param>
+        /// <param name="metadata">Image metadata such as Width, Height, and Bit Depth.</param>
         /// <returns>Decoded pixel data.</returns>
         /// <exception cref="Exception"></exception>
         /// <exception cref="InvalidDataException"></exception>
-        public byte[] Decode(Stream pngStream, out PngMetadata info, out int stride)
+        public byte[] Decode(Stream pngStream, out PngMetadata metadata)
         {
             if (!pngStream.CanRead)
                 throw new Exception($"{nameof(pngStream)} does not support reading.");
@@ -469,28 +475,37 @@ namespace Ridl.Png
             if (!CheckSignature(header))
                 throw new Exception($"Provided {nameof(pngStream)} does not contain a valid signature.");
 
-            info = ReadHeaderChunk(pngStream);
+            metadata = ReadHeaderChunk(pngStream);
 
-            if (info.Filter != 0)
+            if (metadata.Filter != 0)
                 throw new InvalidDataException("Invalid filter type.");
 
-            if (info.Width <= 0 || info.Height <= 0)
+            if (metadata.Width <= 0 || metadata.Height <= 0)
                 throw new InvalidDataException("Invalid image size; The image may be corrupt.");
 
-            DecodeChunks(pngStream, info, out byte[] imgData, out var palette, out var transparency, out var pixelDimensions);
-            info = info with { Palette = palette, Transparency = transparency, PixelDimensions = pixelDimensions };
+            DecodeChunks(pngStream, metadata, out byte[] pixelData, out var palette, out var transparency, out var pixelDimensions);
+            metadata = metadata with { Palette = palette, Transparency = transparency, PixelDimensions = pixelDimensions };
 
-            stride = MathHelpers.DivRoundUp(info.Width * info.BitsPerPixel, 8);
-            return imgData;
+            return pixelData;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="pngStream">A stream containing the image data. Must support reading.</param>
+        /// <returns>Decoded image.</returns>
+        public PngImage Decode(Stream pngStream)
+        {
+            byte[] pixelData = Decode(pngStream, out PngMetadata metadata);
+            PngImage image = new(metadata, pixelData);
+            return image;
         }
 
         /// <summary>
         /// 
         /// </summary>
         /// <param name="pngData">A byte array containing the image data.</param>
-        /// <param name="info">Image metadata such as Width, Height, and Bit Depth.</param>
-        /// <param name="stride">Decoded scanline stride.</param>
-        /// <returns>Decoded pixel data.</returns>
-        public byte[] Decode(byte[] pngData, out PngMetadata info, out int stride) => Decode(new MemoryStream(pngData), out info, out stride);
+        /// <returns>Decoded image.</returns>
+        public PngImage Decode(byte[] pngData) => Decode(new MemoryStream(pngData));
     }
 }

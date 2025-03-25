@@ -26,7 +26,7 @@ namespace Ridl.Benchmark
         public void RidlDecode()
         {
             using var pngStream = GetPngStream();
-            byte[] imgData = PngDecoder.Default.Decode(pngStream, out PngMetadata info, out int stride);
+            var image = PngDecoder.Default.Decode(pngStream);
         }
 
         [Benchmark]

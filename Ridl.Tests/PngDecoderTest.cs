@@ -247,7 +247,7 @@ namespace Ridl.Tests
             {
                 try
                 {
-                    decoder.Decode(stream, out var info, out int stride);
+                    decoder.Decode(stream, out var info);
                 }
                 catch (Exception e)
                 {

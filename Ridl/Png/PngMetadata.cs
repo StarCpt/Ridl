@@ -11,7 +11,7 @@
         internal PngCompressionMethod Compression { get; init; }
         /// <remarks>Always 0.</remarks>
         internal byte Filter { get; init; }
-        public bool Interlaced { get; init; }
+        internal PngInterlaceMethod Interlace { get; init; }
         public PngPaletteColor[]? Palette { get; init; }
         public PngTransparency? Transparency { get; init; }
         public PngPixelDimensions? PixelDimensions { get; init; }
@@ -32,14 +32,6 @@
             _ => throw new Exception("Unknown pixel format."),
         };
 
-        public int Channels => Format switch
-        {
-            PngPixelFormat.Grayscale => 1,
-            PngPixelFormat.Rgb => 3,
-            PngPixelFormat.Indexed => 1,
-            PngPixelFormat.GrayscaleWithAlpha => 2,
-            PngPixelFormat.Rgba => 4,
-            _ => throw new Exception("Unknown pixel format."),
-        };
+        public int Channels => Format.GetChannels();
     }
 }
