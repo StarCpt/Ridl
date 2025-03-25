@@ -1,5 +1,5 @@
 # RIDL (Rapid Image Decoding Library)
-[Insert NuGet URL here]
+[![NuGet Version](https://img.shields.io/nuget/vpre/Ridl)](https://www.nuget.org/packages/Ridl/)
 
 ## Introduction
 Ridl is a cross-platform image decoding library for .NET which aims to achieve decoding speed on-par or better than other image processing libraries.
