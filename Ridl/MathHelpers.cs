@@ -14,5 +14,10 @@ namespace Ridl
         {
             return (dividend + divisor - 1) / divisor;
         }
+
+        public static int Align(int val, int alignment)
+        {
+            return (val + (alignment - 1)) & ~(alignment - 1);
+        }
     }
 }

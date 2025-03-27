@@ -1,4 +1,5 @@
-﻿using Ridl.Png;
+﻿using Ridl.Bmp;
+using Ridl.Png;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
@@ -269,6 +270,56 @@ namespace Ridl.Wpf
         public static BitmapSource ToBitmapSource(this PngImage image)
         {
             return CreateBitmapSource(image.PixelData, image.Width, image.Height, image.BitDepth, image.Format, image.Palette, image.Transparency, image.PixelDimensions);
+        }
+
+        public static BitmapSource ToBitmapSource(this BmpImage image)
+        {
+            PixelFormat format;
+            BitmapPalette? palette = null;
+            byte[] pixelData = image.PixelData;
+
+            switch (image.Format)
+            {
+                case BmpPixelFormat.Rgb:
+                    format = PixelFormats.Rgb24;
+                    break;
+                case BmpPixelFormat.RgbIndexed8:
+                    format = PixelFormats.Indexed8;
+                    palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
+                    break;
+                case BmpPixelFormat.RgbIndexed4:
+                    format = PixelFormats.Indexed4;
+                    palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
+                    break;
+                case BmpPixelFormat.Cmyk:
+                    format = PixelFormats.Cmyk32;
+                    break;
+                case BmpPixelFormat.CmykIndexed8:
+                    format = PixelFormats.Indexed8;
+                    throw new NotImplementedException();
+                case BmpPixelFormat.CmykIndexed4:
+                    format = PixelFormats.Indexed4;
+                    throw new NotImplementedException();
+                default: throw new Exception($"Invalid pixel format: {image.Format}");
+            }
+
+            return BitmapSource.Create(image.Width, image.Height, image.DpiX, image.DpiY, format, palette, pixelData, image.Stride);
+        }
+
+        public static BitmapSource ToBitmapSource(this IImage image)
+        {
+            if (image is PngImage png)
+            {
+                return png.ToBitmapSource();
+            }
+            else if (image is BmpImage bmp)
+            {
+                return bmp.ToBitmapSource();
+            }
+            else
+            {
+                throw new Exception("Unsupported image type.");
+            }
         }
     }
 }
