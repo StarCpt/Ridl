@@ -8,12 +8,10 @@ namespace Ridl.Bmp
 {
     public enum BmpPixelFormat
     {
-        Rgb = 0,
+        Rgb24 = 0,
         RgbIndexed8 = 1,
         RgbIndexed4 = 2,
-        // BitFields = 3,
-        // AlphaBitFields = 6,
-        Cmyk = 11,
+        Cmyk32 = 11,
         CmykIndexed8 = 12,
         CmykIndexed4 = 13,
     }
@@ -29,11 +27,11 @@ namespace Ridl.Bmp
         public BmpPixelFormat Format { get; }
         public double DpiX { get; }
         public double DpiY { get; }
-        public Rgb32[]? Palette { get; }
+        public Bgrx32[]? Palette { get; }
 
         private readonly byte[] _pixelData;
 
-        internal BmpImage(byte[] pixelData, BmpDibHeader header, Rgb32[]? palette)
+        internal BmpImage(byte[] pixelData, BmpDibHeader header, Bgrx32[]? palette)
         {
             _pixelData = pixelData;
 
@@ -43,19 +41,43 @@ namespace Ridl.Bmp
             BitsPerPixel = header.Header.BitCount;
             Format = header.Header.Compression switch
             {
-                BmpCompressionMethod.Rgb => BitsPerPixel == 8 ? BmpPixelFormat.RgbIndexed8 : (BitsPerPixel == 4 ? BmpPixelFormat.RgbIndexed4 : BmpPixelFormat.Rgb),
+                BmpCompressionMethod.Rgb => BitsPerPixel switch
+                {
+                    24 => BmpPixelFormat.Rgb24,
+                    8 => BmpPixelFormat.RgbIndexed8,
+                    4 => BmpPixelFormat.RgbIndexed4,
+                    _ => throw new Exception($"Invalid {nameof(BitsPerPixel)}"),
+                },
                 BmpCompressionMethod.Rle8 => BmpPixelFormat.RgbIndexed8,
                 BmpCompressionMethod.Rle4 => BmpPixelFormat.RgbIndexed4,
                 BmpCompressionMethod.BitFields => throw new NotImplementedException(),
                 BmpCompressionMethod.Jpeg => throw new ArgumentException(header.Header.Compression.ToString()),
                 BmpCompressionMethod.Png => throw new ArgumentException(header.Header.Compression.ToString()),
-                BmpCompressionMethod.Cmyk => BmpPixelFormat.Cmyk,
+                BmpCompressionMethod.Cmyk => BitsPerPixel switch
+                {
+                    32 => BmpPixelFormat.Cmyk32,
+                    8 => BmpPixelFormat.CmykIndexed8,
+                    4 => BmpPixelFormat.CmykIndexed4,
+                    _ => throw new Exception($"Invalid {nameof(BitsPerPixel)}"),
+                },
                 BmpCompressionMethod.CmykRle8 => BmpPixelFormat.CmykIndexed8,
                 BmpCompressionMethod.CmykRle4 => BmpPixelFormat.CmykIndexed4,
                 _ => throw new ArgumentException(header.Header.Compression.ToString()),
             };
             DpiX = header.Header.XPelsPerMeter / 39.3700787402;
             DpiY = header.Header.YPelsPerMeter / 39.3700787402;
+            Palette = palette;
+        }
+
+        internal BmpImage(byte[] pixelData, int width, int height, int stride, BmpPixelFormat format, double dpiX, double dpiY, Bgrx32[]? palette)
+        {
+            _pixelData = pixelData;
+            Width = width;
+            Height = height;
+            Stride = stride;
+            Format = format;
+            DpiX = dpiX;
+            DpiY = dpiY;
             Palette = palette;
         }
     }

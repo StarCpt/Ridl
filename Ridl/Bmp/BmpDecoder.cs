@@ -1,4 +1,6 @@
-﻿using System.Buffers.Binary;
+﻿using Ridl.PixelTypes;
+using System.Buffers.Binary;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
 // References:
@@ -32,7 +34,7 @@ namespace Ridl.Bmp
         BitFields = 3,
         Jpeg = 4,
         Png = 5,
-        //AlphaBitFields = 6,
+        AlphaBitFields = 6, // not in MS docs but mentioned in the wikipedia article
         Cmyk = 11,
         CmykRle8 = 12,
         CmykRle4 = 13,
@@ -62,6 +64,9 @@ namespace Ridl.Bmp
             public int YPelsPerMeter;
             public uint ClrUsed;
             public uint ClrImportant;
+
+            public double GetDpiX(int digitsToRoundTo) => double.Round(XPelsPerMeter / 39.3700787402, digitsToRoundTo);
+            public double GetDpiY(int digitsToRoundTo) => double.Round(YPelsPerMeter / 39.3700787402, digitsToRoundTo);
         }
 
         /// <remarks>
@@ -97,7 +102,16 @@ namespace Ridl.Bmp
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    public readonly record struct Rgb32(byte B, byte G, byte R, byte Reserved);
+    public readonly record struct Bgrx32(byte B, byte G, byte R, byte Reserved)
+    {
+        internal Rgb24 ToRgb24() => new(R, G, B);
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    internal readonly record struct Rgbx32(byte R, byte G, byte B, byte Reserved)
+    {
+        public Rgb24 ToRgb24() => new(R, G, B);
+    }
 
     public class BmpDecoder
     {
@@ -167,136 +181,6 @@ namespace Ridl.Bmp
             return pixelData;
         }
 
-        /// <remarks>
-        /// <see href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-wmf/b64d0c0b-bb80-4b53-8382-f38f264eb685"/>
-        /// </remarks>
-        private static byte[] DecompressRle8(Stream stream, int compressedSize, int stride, int height)
-        {
-            byte[] pixelData = new byte[stride * height];
-            Span<byte> buffer = stackalloc byte[2];
-            Span<byte> row = pixelData.AsSpan(0, stride);
-            int x = 0, y = 0;
-            int readBytes = 0;
-            while (readBytes < compressedSize)
-            {
-                stream.ReadExactly(buffer);
-                readBytes += 2;
-                if (buffer[0] > 0) // Encoded mode
-                {
-                    byte runLength = buffer[0];
-                    byte value = buffer[1];
-                    row.Slice(x, runLength).Fill(value);
-                }
-                else
-                {
-                    if (buffer[1] == 0) // End of line
-                    {
-                        x = 0;
-                        y++;
-                        row = pixelData.AsSpan(stride * y, stride);
-                        continue;
-                    }
-                    else if (buffer[1] == 1) // End of bitmap
-                    {
-                        break; // Exit while loop
-                    }
-                    else if (buffer[1] == 2) // Delta (Relative) mode
-                    {
-                        stream.ReadExactly(buffer);
-                        readBytes += 2;
-
-                        byte relX = buffer[0];
-                        byte relY = buffer[1];
-
-                        x += relX;
-                        y += relY;
-                    }
-                    else // Absolute mode
-                    {
-                        byte runLength = buffer[1];
-                        stream.ReadExactly(row.Slice(x, runLength));
-                        readBytes += runLength;
-
-                        int padding = runLength % 2; // Each run is padded to a 2-byte boundary
-                        stream.ReadDiscard(padding);
-                        readBytes += padding;
-                    }
-                }
-            }
-
-            return pixelData;
-        }
-
-        /// <remarks>
-        /// <see href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-wmf/73b57f24-6d78-4eeb-9c06-8f892d88f1ab"/>
-        /// </remarks>
-        private static byte[] DecompressRle4(Stream stream, int compressedSize, int stride, int width, int height)
-        {
-            byte[] pixelData = new byte[stride * height];
-            Span<byte> buffer = stackalloc byte[2];
-            Span<byte> buffer2 = stackalloc byte[256];
-            Span<byte> row = pixelData.AsSpan(0, stride);
-            int x = 0, y = 0;
-            int readBytes = 0;
-            while (true)
-            {
-                stream.ReadExactly(buffer);
-                readBytes += 2;
-
-                if (buffer[0] > 0) // Encoded mode
-                {
-                    byte runLength = buffer[0];
-                    byte value = buffer[1];
-
-                    for (int i = 0; i < runLength; i++, x++)
-                    {
-                        int val = (value << i % 2 * 4) & 0xf0;
-                        row[x / 2] |= (byte)(val >> x % 2 * 4);
-                    }
-                }
-                else
-                {
-                    if (buffer[1] == 0) // End of line
-                    {
-                        x = 0;
-                        y++;
-                        row = pixelData.AsSpan(stride * y, stride);
-                        continue;
-                    }
-                    else if (buffer[1] == 1) // End of bitmap
-                    {
-                        break; // Exit while loop
-                    }
-                    else if (buffer[1] == 2) // Delta (Relative) mode
-                    {
-                        stream.ReadExactly(buffer);
-                        readBytes += 2;
-
-                        byte relX = buffer[0];
-                        byte relY = buffer[1];
-
-                        x += relX;
-                        y += relY;
-                    }
-                    else // Absolute mode
-                    {
-                        byte runLength = buffer[1];
-                        int bytesToRead = MathHelpers.Align((runLength + 1) / 2, 2);
-                        stream.ReadExactly(buffer2.Slice(0, bytesToRead));
-                        readBytes += bytesToRead;
-
-                        for (int i = 0; i < runLength; i++, x++)
-                        {
-                            int val = (buffer2[i / 2] << i % 2 * 4) & 0xf0;
-                            row[x / 2] |= (byte)(val >> x % 2 * 4);
-                        }
-                    }
-                }
-            }
-
-            return pixelData;
-        }
-
         private static byte[] ReadCompressedPixelData(Stream stream, in BmpDibHeader dibHeader)
         {
             int stride = (dibHeader.Header.Width * dibHeader.Header.BitCount + 31) / 32 * 4; // align stride to 4 bytes
@@ -304,14 +188,175 @@ namespace Ridl.Bmp
             byte[] pixelData;
             if (dibHeader.Header.Compression is BmpCompressionMethod.Rle8 or BmpCompressionMethod.CmykRle8)
             {
-                pixelData = DecompressRle8(stream, (int)dibHeader.Header.SizeImage, stride, dibHeader.Header.Height);
+                if (dibHeader.Header.BitCount != 8)
+                    throw new Exception($"Bpp must be 8. Bpp={dibHeader.Header.BitCount}");
+
+                pixelData = RleBitmapDecoder.DecodeRle8(stream, (int)dibHeader.Header.SizeImage, stride, dibHeader.Header.Height);
             }
             else // if (dibHeader.Header.Compression is BmpCompressionMethod.Rle4 or BmpCompressionMethod.CmykRle4)
             {
-                pixelData = DecompressRle4(stream, (int)dibHeader.Header.SizeImage, stride, dibHeader.Header.Width, dibHeader.Header.Height);
+                if (dibHeader.Header.BitCount != 4)
+                    throw new Exception($"Bpp must be 4. Bpp={dibHeader.Header.BitCount}");
+
+                pixelData = RleBitmapDecoder.DecodeRle4(stream, (int)dibHeader.Header.SizeImage, stride, dibHeader.Header.Height);
             }
 
             return pixelData;
+        }
+
+        private static BmpImage DecodeBitFields16ToRgb24(Stream stream, in BmpDibHeader dibHeader, uint maskR, uint maskG, uint maskB)
+        {
+            // >8 bit channels are downsampled to 8
+
+            int resultStride = dibHeader.Header.Width * Rgb24.Size;
+            byte[] pixelData = new byte[resultStride * dibHeader.Header.Height];
+
+            int srcRowSize = dibHeader.Header.Width * 2;
+            int srcRowPadding = (4 - (srcRowSize % 4)) & 0b11;
+
+            int shiftR = BitOperations.TrailingZeroCount(maskR);
+            int shiftG = BitOperations.TrailingZeroCount(maskG);
+            int shiftB = BitOperations.TrailingZeroCount(maskB);
+            // Assume the masks are contiguous, otherwise they're invalid anyway
+            int depthR = BitOperations.TrailingZeroCount((maskR >> shiftR) ^ 0xffff_ffffu);
+            int depthG = BitOperations.TrailingZeroCount((maskG >> shiftG) ^ 0xffff_ffffu);
+            int depthB = BitOperations.TrailingZeroCount((maskB >> shiftB) ^ 0xffff_ffffu);
+
+            for (int y = 0; y < dibHeader.Header.Height; y++)
+            {
+                Span<byte> resultRow = pixelData.AsSpan(resultStride * y, resultStride);
+                Span<Rgb24> resultRowRgb = MemoryMarshal.Cast<byte, Rgb24>(resultRow);
+
+                // use part of the current row (the end portion so it doesn't conflict) to store the compressed data
+                Span<byte> srcRow = resultRow[^srcRowSize..];
+                stream.ReadExactly(srcRow);
+                stream.ReadDiscard(srcRowPadding);
+
+                Span<ushort> sourceRow16 = MemoryMarshal.Cast<byte, ushort>(srcRow);
+
+                for (int x = 0; x < dibHeader.Header.Width; x++)
+                {
+                    ushort val = sourceRow16[x];
+                    uint r = (val & maskR) >> shiftR;
+                    uint g = (val & maskG) >> shiftG;
+                    uint b = (val & maskB) >> shiftB;
+
+                    // downsample to 8 bits (if needed) - not sure if I need to use a more sophisticated method
+                    r = depthR > 8 ? (r >> (depthR - 8)) : r;
+                    g = depthG > 8 ? (g >> (depthG - 8)) : g;
+                    b = depthB > 8 ? (b >> (depthB - 8)) : b;
+
+                    resultRowRgb[x] = new Rgb24((byte)r, (byte)g, (byte)b);
+                }
+            }
+
+            double dpiX = double.Round(dibHeader.Header.XPelsPerMeter / 39.3700787402, 1);
+            double dpiY = double.Round(dibHeader.Header.YPelsPerMeter / 39.3700787402, 1);
+            return new BmpImage(pixelData, dibHeader.Header.Width, dibHeader.Header.Height, resultStride, BmpPixelFormat.Rgb24, dpiX, dpiY, null);
+        }
+
+        private static BmpImage DecodeBitFields32ToRgb48(Stream stream, in BmpDibHeader dibHeader, uint maskR, uint maskG, uint maskB)
+        {
+            // >16 bit channels are downsampled to 16
+            int resultStride = dibHeader.Header.Width * Rgb48.Size;
+            byte[] pixelData = new byte[resultStride * dibHeader.Header.Height];
+
+            int srcRowSize = dibHeader.Header.Width * 4;
+            int scrRowPadding = (4 - (srcRowSize % 4)) & 0b11;
+
+            int shiftR = BitOperations.TrailingZeroCount(maskR);
+            int shiftG = BitOperations.TrailingZeroCount(maskG);
+            int shiftB = BitOperations.TrailingZeroCount(maskB);
+            // Assume the masks are contiguous, otherwise they're invalid anyway
+            int depthR = BitOperations.TrailingZeroCount((maskR >> shiftR) ^ 0xffff_ffffu);
+            int depthG = BitOperations.TrailingZeroCount((maskG >> shiftG) ^ 0xffff_ffffu);
+            int depthB = BitOperations.TrailingZeroCount((maskB >> shiftB) ^ 0xffff_ffffu);
+
+            for (int y = 0; y < dibHeader.Header.Height; y++)
+            {
+                Span<byte> row = pixelData.AsSpan(resultStride * y, resultStride);
+                Span<Rgb48> rowRgb = MemoryMarshal.Cast<byte, Rgb48>(row);
+
+                // use part of the current row (the end portion so it doesn't conflict) to store the compressed data
+                Span<byte> srcRow = row[^srcRowSize..];
+                stream.ReadExactly(srcRow);
+                stream.ReadDiscard(scrRowPadding);
+
+                Span<ushort> srcRow16 = MemoryMarshal.Cast<byte, ushort>(srcRow);
+
+                for (int x = 0; x < dibHeader.Header.Width; x++)
+                {
+                    ushort val = srcRow16[x];
+                    uint r = (val & maskR) >> shiftR;
+                    uint g = (val & maskG) >> shiftG;
+                    uint b = (val & maskB) >> shiftB;
+
+                    // downsample to 8 bits (if needed) - not sure if I need to use a more sophisticated method
+                    r = depthR > 16 ? (r >> (depthR - 16)) : r;
+                    g = depthG > 16 ? (g >> (depthG - 16)) : g;
+                    b = depthB > 16 ? (b >> (depthB - 16)) : b;
+
+                    rowRgb[x] = new Rgb48((ushort)r, (ushort)g, (ushort)b);
+                }
+            }
+
+            double dpiX = double.Round(dibHeader.Header.XPelsPerMeter / 39.3700787402, 1);
+            double dpiY = double.Round(dibHeader.Header.YPelsPerMeter / 39.3700787402, 1);
+            return new BmpImage(pixelData, dibHeader.Header.Width, dibHeader.Header.Height, resultStride, BmpPixelFormat.Rgb24, dpiX, dpiY, null);
+        }
+
+        private static BmpImage DecodeBitFields(Stream stream, in BmpDibHeader dibHeader, uint maskR, uint maskG, uint maskB)
+        {
+            if (dibHeader.Header.BitCount == 16)
+            {
+                // For 16 bpp, only the lower 16 bits should be used
+                if (((maskR | maskG | maskB) & 0xffff0000) != 0)
+                    throw new Exception("Invalid BitField masks. Only the lower 16 bits should be used on 16bpp.");
+
+                return DecodeBitFields16ToRgb24(stream, dibHeader, maskR, maskG, maskB);
+            }
+            else // if (dibHeader.Header.BitCount == 32)
+            {
+                return DecodeBitFields32ToRgb48(stream, dibHeader, maskR, maskG, maskB);
+            }
+        }
+
+        /// <summary>
+        /// Convert RGB16 (5 bits each, 1 bit reserved) to RGB24
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <param name="dibHeader"></param>
+        /// <returns></returns>
+        private static BmpImage DecodeRgb16ToRgb24(Stream stream, in BmpDibHeader dibHeader) =>
+            DecodeBitFields16ToRgb24(stream, dibHeader, 0b0_11111_00000_00000, 0b0_00000_11111_00000, 0b0_00000_00000_11111);
+
+        /// <summary>
+        /// Decode RGBx32 (RGB24 + 8 reserved bits) to RGB24
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <param name="header"></param>
+        /// <returns></returns>
+        private static BmpImage DecodeRgbx32ToRgb24(Stream stream, in BmpDibHeader.BitmapInfoHeader header)
+        {
+            int srcStride = MathHelpers.Align(header.Width * 4, 4);
+            int destStride = header.Width * Rgb24.Size;
+
+            byte[] srcScan = new byte[srcStride];
+            Span<Rgbx32> srcScanAsRgbx32 = MemoryMarshal.Cast<byte, Rgbx32>(srcScan.AsSpan());
+
+            byte[] convertedPixelData = new byte[destStride * header.Height];
+
+            for (int y = 0; y < header.Height; y++)
+            {
+                stream.ReadExactly(srcScan);
+                Span<Rgb24> destScanAsRgb24 = MemoryMarshal.Cast<byte, Rgb24>(convertedPixelData.AsSpan(destStride * y, destStride));
+                for (int x = 0; x < header.Width; x++)
+                {
+                    destScanAsRgb24[x] = srcScanAsRgbx32[x].ToRgb24();
+                }
+            }
+
+            return new BmpImage(convertedPixelData, header.Width, header.Height, destStride, BmpPixelFormat.Rgb24, header.GetDpiX(1), header.GetDpiY(1), null);
         }
 
         public IImage Decode(Stream stream)
@@ -329,13 +374,23 @@ namespace Ridl.Bmp
             BmpDibHeader dibHeader = ReadDibHeader(stream);
 
             int extraBitMasksSize = 0;
+            Span<uint> bitFields = stackalloc uint[4];
             if (dibHeader.Type is BmpDibHeaderType.BitmapInfoHeader && dibHeader.Header.Compression is BmpCompressionMethod.BitFields)
             {
+                if (dibHeader.Header.BitCount is not 16 and not 32)
+                {
+                    throw new Exception($"{BmpDibHeaderType.BitmapInfoHeader} is only valid with 16 or 32 bpp. Bpp={dibHeader.Header.BitCount}");
+                }
+
+                extraBitMasksSize = sizeof(uint) * 3;
+
                 // Read extra bit masks
-                throw new NotImplementedException();
+                stream.ReadExactly(MemoryMarshal.AsBytes(bitFields[..3]));
+
+                // Note: BitFields formats are converted from 16/32 bits to RGB24/48 respectively as it simplifies things
             }
 
-            Rgb32[] colorTable = new Rgb32[Math.Min(1 << dibHeader.Header.BitCount, dibHeader.Header.ClrUsed)];
+            Bgrx32[] colorTable = new Bgrx32[Math.Min(1 << dibHeader.Header.BitCount, dibHeader.Header.ClrUsed)];
             int colorTableSize = colorTable.Length * 4;
             if (dibHeader.Type is BmpDibHeaderType.BitmapInfoHeader or BmpDibHeaderType.BitmapV4Header or BmpDibHeaderType.BitmapV5Header && dibHeader.Header.ClrUsed > 0)
             {
@@ -357,7 +412,37 @@ namespace Ridl.Bmp
             {
                 return Ridl.Png.PngDecoder.Default.Decode(stream);
             }
-            else if (dibHeader.Header.Compression is BmpCompressionMethod.Rgb or BmpCompressionMethod.BitFields or BmpCompressionMethod.Cmyk)
+            else if (dibHeader.Header.Compression is BmpCompressionMethod.BitFields)
+            {
+                return DecodeBitFields(stream, dibHeader, bitFields[0], bitFields[1], bitFields[2]);
+            }
+            else if (dibHeader.Header.Compression is BmpCompressionMethod.AlphaBitFields)
+            {
+                throw new NotImplementedException();
+            }
+            else if (dibHeader.Header.Compression is BmpCompressionMethod.Rgb)
+            {
+                // For uncompressed formats, the origin is bottom-left if y is positive and top-left if y is negative.
+                bool isTopDown = int.IsNegative(dibHeader.Header.Height);
+                dibHeader.Header.Height = int.Abs(dibHeader.Header.Height);
+
+                switch (dibHeader.Header.BitCount)
+                {
+                    case 8:
+                        pixelData = ReadUncompressedPixelData(stream, dibHeader, isTopDown);
+                        break;
+                    case 16:
+                        return DecodeRgb16ToRgb24(stream, dibHeader);
+                    case 24:
+                        pixelData = ReadUncompressedPixelData(stream, dibHeader, isTopDown);
+                        break;
+                    case 32:
+                        return DecodeRgbx32ToRgb24(stream, dibHeader.Header);
+                    default: throw new Exception($"Invalid {nameof(BmpCompressionMethod)}.{BmpCompressionMethod.Rgb} bit depth.");
+                }
+                
+            }
+            else if (dibHeader.Header.Compression is BmpCompressionMethod.Cmyk)
             {
                 // For uncompressed formats, the origin is bottom-left if y is positive and top-left if y is negative.
                 bool isTopDown = int.IsNegative(dibHeader.Header.Height);

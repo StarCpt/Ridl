@@ -280,7 +280,7 @@ namespace Ridl.Wpf
 
             switch (image.Format)
             {
-                case BmpPixelFormat.Rgb:
+                case BmpPixelFormat.Rgb24:
                     format = PixelFormats.Rgb24;
                     break;
                 case BmpPixelFormat.RgbIndexed8:
@@ -291,7 +291,7 @@ namespace Ridl.Wpf
                     format = PixelFormats.Indexed4;
                     palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
                     break;
-                case BmpPixelFormat.Cmyk:
+                case BmpPixelFormat.Cmyk32:
                     format = PixelFormats.Cmyk32;
                     break;
                 case BmpPixelFormat.CmykIndexed8:
