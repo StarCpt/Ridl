@@ -278,29 +278,22 @@ namespace Ridl.Wpf
             BitmapPalette? palette = null;
             byte[] pixelData = image.PixelData;
 
-            switch (image.Format)
+            format = image.Format switch
             {
-                case BmpPixelFormat.Rgb24:
-                    format = PixelFormats.Rgb24;
-                    break;
-                case BmpPixelFormat.RgbIndexed8:
-                    format = PixelFormats.Indexed8;
-                    palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
-                    break;
-                case BmpPixelFormat.RgbIndexed4:
-                    format = PixelFormats.Indexed4;
-                    palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
-                    break;
-                case BmpPixelFormat.Cmyk32:
-                    format = PixelFormats.Cmyk32;
-                    break;
-                case BmpPixelFormat.CmykIndexed8:
-                    format = PixelFormats.Indexed8;
-                    throw new NotImplementedException();
-                case BmpPixelFormat.CmykIndexed4:
-                    format = PixelFormats.Indexed4;
-                    throw new NotImplementedException();
-                default: throw new Exception($"Invalid pixel format: {image.Format}");
+                BmpPixelFormat.Rgb24 => PixelFormats.Rgb24,
+                BmpPixelFormat.Rgb48 => PixelFormats.Rgb48,
+                BmpPixelFormat.Bgr24 => PixelFormats.Bgr24,
+                BmpPixelFormat.Indexed1 => PixelFormats.Indexed1,
+                BmpPixelFormat.Indexed2 => PixelFormats.Indexed2,
+                BmpPixelFormat.Indexed4 => PixelFormats.Indexed4,
+                BmpPixelFormat.Indexed8 => PixelFormats.Indexed8,
+                BmpPixelFormat.Cmyk32 => PixelFormats.Cmyk32,
+                _ => throw new Exception($"Invalid pixel format: {image.Format}"),
+            };
+
+            if (image.Format.IsIndexed())
+            {
+                palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
             }
 
             return BitmapSource.Create(image.Width, image.Height, image.DpiX, image.DpiY, format, palette, pixelData, image.Stride);

@@ -14,12 +14,12 @@ namespace Ridl.Bmp
         /// <remarks>
         /// <see href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-wmf/b64d0c0b-bb80-4b53-8382-f38f264eb685"/>
         /// </remarks>
-        public static byte[] DecodeRle8(Stream stream, int compressedSize, int stride, int height)
+        public static byte[] DecodeRle8(Stream stream, int stride, int height, bool isTopDown)
         {
             byte[] pixelData = new byte[stride * height];
             Span<byte> buffer = stackalloc byte[2];
-            Span<byte> row = pixelData.AsSpan(0, stride);
-            int x = 0, y = 0;
+            int x = 0, y = isTopDown ? 0 : (height - 1);
+            Span<byte> scanline = pixelData.AsSpan(stride * y, stride);
             while (true)
             {
                 stream.ReadExactly(buffer);
@@ -28,15 +28,16 @@ namespace Ridl.Bmp
                 {
                     byte runLength = buffer[0];
                     byte value = buffer[1];
-                    row.Slice(x, runLength).Fill(value);
+                    scanline.Slice(x, runLength).Fill(value);
+                    x += runLength;
                 }
                 else
                 {
                     if (buffer[1] == 0) // End of line
                     {
                         x = 0;
-                        y++;
-                        row = pixelData.AsSpan(stride * y, stride);
+                        y = isTopDown ? (y + 1) : (y - 1);
+                        scanline = pixelData.AsSpan(stride * y, stride);
                         continue;
                     }
                     else if (buffer[1] == 1) // End of bitmap
@@ -51,12 +52,13 @@ namespace Ridl.Bmp
                         byte relY = buffer[1];
 
                         x += relX;
-                        y += relY;
+                        y = isTopDown ? (y + relY) : (y - relY);
                     }
                     else // Absolute mode
                     {
                         byte runLength = buffer[1];
-                        stream.ReadExactly(row.Slice(x, runLength));
+                        stream.ReadExactly(scanline.Slice(x, runLength));
+                        x += runLength;
 
                         int padding = runLength % 2; // Each run is padded to a 2-byte boundary
                         stream.ReadDiscard(padding);
@@ -70,13 +72,13 @@ namespace Ridl.Bmp
         /// <remarks>
         /// <see href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-wmf/73b57f24-6d78-4eeb-9c06-8f892d88f1ab"/>
         /// </remarks>
-        public static byte[] DecodeRle4(Stream stream, int compressedSize, int stride, int height)
+        public static byte[] DecodeRle4(Stream stream, int stride, int height, bool isTopDown)
         {
             byte[] pixelData = new byte[stride * height];
             Span<byte> buffer = stackalloc byte[2];
             Span<byte> buffer2 = stackalloc byte[256];
-            Span<byte> row = pixelData.AsSpan(0, stride);
-            int x = 0, y = 0;
+            int x = 0, y = isTopDown ? 0 : (height - 1);
+            Span<byte> scanline = pixelData.AsSpan(stride * y, stride);
             while (true)
             {
                 stream.ReadExactly(buffer);
@@ -89,7 +91,7 @@ namespace Ridl.Bmp
                     for (int i = 0; i < runLength; i++, x++)
                     {
                         int val = (value << i % 2 * 4) & 0xf0;
-                        row[x / 2] |= (byte)(val >> x % 2 * 4);
+                        scanline[x / 2] |= (byte)(val >> x % 2 * 4);
                     }
                 }
                 else
@@ -97,8 +99,8 @@ namespace Ridl.Bmp
                     if (buffer[1] == 0) // End of line
                     {
                         x = 0;
-                        y++;
-                        row = pixelData.AsSpan(stride * y, stride);
+                        y = isTopDown ? (y + 1) : (y - 1);
+                        scanline = pixelData.AsSpan(stride * y, stride);
                         continue;
                     }
                     else if (buffer[1] == 1) // End of bitmap
@@ -113,7 +115,7 @@ namespace Ridl.Bmp
                         byte relY = buffer[1];
 
                         x += relX;
-                        y += relY;
+                        y = isTopDown ? (y + relY) : (y - relY);
                     }
                     else // Absolute mode
                     {
@@ -124,7 +126,7 @@ namespace Ridl.Bmp
                         for (int i = 0; i < runLength; i++, x++)
                         {
                             int val = (buffer2[i / 2] << i % 2 * 4) & 0xf0;
-                            row[x / 2] |= (byte)(val >> x % 2 * 4);
+                            scanline[x / 2] |= (byte)(val >> x % 2 * 4);
                         }
                     }
                 }
