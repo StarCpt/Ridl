@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace Ridl.PixelTypes
+namespace Ridl.PixelFormats
 {
     [StructLayout(LayoutKind.Sequential, Pack = 2)]
     internal struct Rgb48(ushort r, ushort g, ushort b)

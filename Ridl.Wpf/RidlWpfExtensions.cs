@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using WpfPixelFormats = System.Windows.Media.PixelFormats;
 
 namespace Ridl.Wpf
 {
@@ -20,7 +21,7 @@ namespace Ridl.Wpf
                     switch (bitDepth)
                     {
                         case 1:
-                            wpfFormat = PixelFormats.Indexed1;
+                            wpfFormat = WpfPixelFormats.Indexed1;
                             wpfPalette = new BitmapPalette(
                             [
                                 Color.FromArgb(alphaColor == 0 ? byte.MinValue : byte.MaxValue, 0, 0, 0),
@@ -28,7 +29,7 @@ namespace Ridl.Wpf
                             ]);
                             break;
                         case 2:
-                            wpfFormat = PixelFormats.Indexed2;
+                            wpfFormat = WpfPixelFormats.Indexed2;
                             Color[] paletteColors = new Color[1 << 2];
                             for (int i = 0; i < paletteColors.Length; i++)
                             {
@@ -38,7 +39,7 @@ namespace Ridl.Wpf
                             wpfPalette = new BitmapPalette(paletteColors);
                             break;
                         case 4:
-                            wpfFormat = PixelFormats.Indexed4;
+                            wpfFormat = WpfPixelFormats.Indexed4;
                             paletteColors = new Color[1 << 4];
                             for (int i = 0; i < paletteColors.Length; i++)
                             {
@@ -48,7 +49,7 @@ namespace Ridl.Wpf
                             wpfPalette = new BitmapPalette(paletteColors);
                             break;
                         case 8:
-                            wpfFormat = PixelFormats.Indexed8;
+                            wpfFormat = WpfPixelFormats.Indexed8;
                             paletteColors = new Color[1 << 8];
                             for (int i = 0; i < paletteColors.Length; i++)
                             {
@@ -59,7 +60,7 @@ namespace Ridl.Wpf
                             break;
                         case 16:
                             // No indexed16 format, so use rgba64 for 16-bit depth w/alpha
-                            wpfFormat = PixelFormats.Rgba64;
+                            wpfFormat = WpfPixelFormats.Rgba64;
                             byte[] newImageBytes = new byte[pixelData.Length * 4];
 
                             // Work with 16-bit elements since it's a bit more readable
@@ -84,11 +85,11 @@ namespace Ridl.Wpf
                 {
                     wpfFormat = bitDepth switch
                     {
-                        1 => PixelFormats.BlackWhite,
-                        2 => PixelFormats.Gray2,
-                        4 => PixelFormats.Gray4,
-                        8 => PixelFormats.Gray8,
-                        16 => PixelFormats.Gray16,
+                        1 => WpfPixelFormats.BlackWhite,
+                        2 => WpfPixelFormats.Gray2,
+                        4 => WpfPixelFormats.Gray4,
+                        8 => WpfPixelFormats.Gray8,
+                        16 => WpfPixelFormats.Gray16,
                         _ => throw new Exception($"Invalid bit depth for {format} format. BitDepth={bitDepth}"),
                     };
                 }
@@ -100,7 +101,7 @@ namespace Ridl.Wpf
                     switch (bitDepth)
                     {
                         case 8:
-                            wpfFormat = PixelFormats.Bgra32;
+                            wpfFormat = WpfPixelFormats.Bgra32;
                             byte[] newImageBytes = new byte[width * height * wpfFormat.BitsPerPixel / 8];
                             byte alphaR8 = (byte)(alphaR & 0xff);
                             byte alphaG8 = (byte)(alphaG & 0xff);
@@ -120,7 +121,7 @@ namespace Ridl.Wpf
                             pixelData = newImageBytes;
                             break;
                         case 16:
-                            wpfFormat = PixelFormats.Rgba64;
+                            wpfFormat = WpfPixelFormats.Rgba64;
                             newImageBytes = new byte[width * height * wpfFormat.BitsPerPixel / 8];
 
                             // Work with 16-bit elements since it's a bit more readable
@@ -148,8 +149,8 @@ namespace Ridl.Wpf
                 {
                     wpfFormat = bitDepth switch
                     {
-                        8 => PixelFormats.Rgb24,
-                        16 => PixelFormats.Rgb48,
+                        8 => WpfPixelFormats.Rgb24,
+                        16 => WpfPixelFormats.Rgb48,
                         _ => throw new Exception($"Invalid bit depth for {format} format. BitDepth={bitDepth}"),
                     };
                     ;
@@ -159,10 +160,10 @@ namespace Ridl.Wpf
             {
                 wpfFormat = bitDepth switch
                 {
-                    1 => PixelFormats.Indexed1,
-                    2 => PixelFormats.Indexed2,
-                    4 => PixelFormats.Indexed4,
-                    8 => PixelFormats.Indexed8,
+                    1 => WpfPixelFormats.Indexed1,
+                    2 => WpfPixelFormats.Indexed2,
+                    4 => WpfPixelFormats.Indexed4,
+                    8 => WpfPixelFormats.Indexed8,
                     _ => throw new Exception($"Invalid bit depth for {format} format. BitDepth={bitDepth}"),
                 };
 
@@ -183,7 +184,7 @@ namespace Ridl.Wpf
                 switch (bitDepth)
                 {
                     case 8:
-                        wpfFormat = PixelFormats.Bgra32;
+                        wpfFormat = WpfPixelFormats.Bgra32;
                         byte[] newImageBytes = new byte[width * height * wpfFormat.BitsPerPixel / 8];
                         for (int i = 0; i < pixelData.Length; i += 2)
                         {
@@ -198,7 +199,7 @@ namespace Ridl.Wpf
                         pixelData = newImageBytes;
                         break;
                     case 16:
-                        wpfFormat = PixelFormats.Rgba64;
+                        wpfFormat = WpfPixelFormats.Rgba64;
                         newImageBytes = new byte[width * height * wpfFormat.BitsPerPixel / 8];
 
                         // Work with 16-bit elements since it's a bit more readable
@@ -226,13 +227,13 @@ namespace Ridl.Wpf
                 {
                     case 8:
                         // There is no Rgba32 PixelFormat in wpf so the pixels need to be converted to Bgra32
-                        wpfFormat = PixelFormats.Bgra32;
+                        wpfFormat = WpfPixelFormats.Bgra32;
                         for (int i = 0; i < pixelData.Length; i += 4)
                         {
                             (pixelData[i], pixelData[i + 2]) = (pixelData[i + 2], pixelData[i]);
                         }
                         break;
-                    case 16: wpfFormat = PixelFormats.Rgba64; break;
+                    case 16: wpfFormat = WpfPixelFormats.Rgba64; break;
                     default: throw new Exception($"Invalid bit depth for {format} format. BitDepth={bitDepth}");
                 }
             }
@@ -280,14 +281,16 @@ namespace Ridl.Wpf
 
             format = image.Format switch
             {
-                BmpPixelFormat.Rgb24 => PixelFormats.Rgb24,
-                BmpPixelFormat.Rgb48 => PixelFormats.Rgb48,
-                BmpPixelFormat.Bgr24 => PixelFormats.Bgr24,
-                BmpPixelFormat.Indexed1 => PixelFormats.Indexed1,
-                BmpPixelFormat.Indexed2 => PixelFormats.Indexed2,
-                BmpPixelFormat.Indexed4 => PixelFormats.Indexed4,
-                BmpPixelFormat.Indexed8 => PixelFormats.Indexed8,
-                BmpPixelFormat.Cmyk32 => PixelFormats.Cmyk32,
+                BmpPixelFormat.Rgb24 => WpfPixelFormats.Rgb24,
+                BmpPixelFormat.Rgb48 => WpfPixelFormats.Rgb48,
+                BmpPixelFormat.Rgba32 => WpfPixelFormats.Bgra32,
+                BmpPixelFormat.Rgba64 => WpfPixelFormats.Rgba64,
+                BmpPixelFormat.Bgr24 => WpfPixelFormats.Bgr24,
+                BmpPixelFormat.Indexed1 => WpfPixelFormats.Indexed1,
+                BmpPixelFormat.Indexed2 => WpfPixelFormats.Indexed2,
+                BmpPixelFormat.Indexed4 => WpfPixelFormats.Indexed4,
+                BmpPixelFormat.Indexed8 => WpfPixelFormats.Indexed8,
+                BmpPixelFormat.Cmyk32 => WpfPixelFormats.Cmyk32,
                 _ => throw new Exception($"Invalid pixel format: {image.Format}"),
             };
 
@@ -296,7 +299,25 @@ namespace Ridl.Wpf
                 palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
             }
 
+            if (image.Format is BmpPixelFormat.Rgba32)
+            {
+                pixelData = image.PixelData.ToArray();
+                RgbaToBgra32(ref pixelData, image.Width, image.Height, image.Stride);
+            }
+
             return BitmapSource.Create(image.Width, image.Height, image.DpiX, image.DpiY, format, palette, pixelData, image.Stride);
+        }
+
+        private static void RgbaToBgra32(ref byte[] pixelData, int width, int height, int stride)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Span<byte> scanline = pixelData.AsSpan(stride * y, stride);
+                for (int x = 0; x < width; x++)
+                {
+                    (scanline[x], scanline[x + 2]) = (scanline[x + 2], scanline[x]);
+                }
+            }
         }
 
         public static BitmapSource ToBitmapSource(this IImage image)

@@ -4,9 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Ridl.PixelTypes
+namespace Ridl.PixelFormats
 {
-    public enum PixelFormat
+    // placeholder format types
+    internal enum PixelFormat
     {
         Unknown = 0,
 

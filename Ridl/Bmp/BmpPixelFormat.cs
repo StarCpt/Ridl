@@ -3,6 +3,7 @@
     public enum BmpPixelFormat
     {
         Rgb24, Rgb48,
+        Rgba32, Rgba64,
         Bgr24,
         Indexed1, Indexed2, Indexed4, Indexed8,
         Cmyk32,

@@ -1,4 +1,4 @@
-﻿using Ridl.PixelTypes;
+﻿using Ridl.PixelFormats;
 
 namespace Ridl.Bmp
 {
