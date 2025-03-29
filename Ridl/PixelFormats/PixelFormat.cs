@@ -17,7 +17,7 @@ namespace Ridl.PixelFormats
         // Different RGBA formats
         Rgba32, Rgba64,
         //Bgra32, Bgra64,
-        ///Argb32, Argb64,
+        //Argb32, Argb64,
 
         // Paletted
         Indexed1, Indexed2, Indexed4, Indexed8,

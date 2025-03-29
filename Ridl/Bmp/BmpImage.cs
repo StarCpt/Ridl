@@ -4,6 +4,8 @@ namespace Ridl.Bmp
 {
     public class BmpImage : IImage
     {
+        public const double DEFAULT_DPI = 96;
+
         public byte[] PixelData => _pixelData;
 
         public int Width { get; }

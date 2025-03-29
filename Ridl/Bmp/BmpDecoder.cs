@@ -26,8 +26,6 @@ namespace Ridl.Bmp
 
     public class BmpDecoder
     {
-        public const double DEFAULT_BMP_DPI = 96;
-
         [StructLayout(LayoutKind.Sequential, Pack = 4)]
         private struct BmpFileHeader
         {
@@ -80,7 +78,7 @@ namespace Ridl.Bmp
                     if (os22xHeader.HalftoneAlgorithm != BmpHalftoneAlgorithm.None)
                         throw new NotImplementedException();
                     return os22xHeader;
-                case BmpHeaderType.OS22xBitmapHeader_Short: throw new NotImplementedException();
+                case BmpHeaderType.OS22xBitmapHeader_Short: return MemoryMarshal.AsRef<OS22xBitmapHeader_16>(buffer);
                 case BmpHeaderType.BitmapInfoHeader: return MemoryMarshal.AsRef<BitmapInfoHeader>(buffer);
                 case BmpHeaderType.BitmapV2InfoHeader: return MemoryMarshal.AsRef<BitmapV2InfoHeader>(buffer);
                 case BmpHeaderType.BitmapV3InfoHeader: return MemoryMarshal.AsRef<BitmapV3InfoHeader>(buffer);
@@ -621,29 +619,42 @@ namespace Ridl.Bmp
 
             Bgrx32[]? colorTable = null;
             int colorTableSize = 0;
-            if (bmpHeader is BitmapInfoHeader or OS22xBitmapHeader or IBmpHeaderV2OrAbove && bmpHeader.PaletteLength > 0 && bmpHeader.Format is not BmpCompressionMethod.Png and not BmpCompressionMethod.Jpeg)
+            // Check PNG and JPEG since they may erroneously claim to contain a palette with one or more colors
+            if (bmpHeader.BitsPerPixel is 1 or 2 or 4 or 8 && bmpHeader.Format is not BmpCompressionMethod.Png and not BmpCompressionMethod.Jpeg)
             {
-                // A malformed bmp file may have less or more than bmpHeader.PaletteLength palette entries.
-                // Instead of throwing an error, try to fill as many entries as possible then leave the remaining entries black.
-                int maxNumColors = Math.Min(1 << bmpHeader.BitsPerPixel, ((int)fileHeader.DataOffset - (14 + (int)headerSize + extraBitMasksSize)) / 4);
-                colorTable = new Bgrx32[Math.Min(1 << bmpHeader.BitsPerPixel, bmpHeader.PaletteLength)];
-                colorTableSize = Math.Min(maxNumColors, bmpHeader.PaletteLength) * 4;
-                Span<byte> colorTableBytes = MemoryMarshal.AsBytes(colorTable.AsSpan())[..colorTableSize];
-                stream.ReadExactly(colorTableBytes);
-            }
-            else if (bmpHeader is BitmapCoreHeader && bmpHeader.BitsPerPixel is 4 or 8)
-            {
-                // A malformed bmp file may have less than 2^n palette entries.
-                // Instead of throwing an error, try to fill as many entries as possible then leave the remaining entries black.
-                int numColors = Math.Min(1 << bmpHeader.BitsPerPixel, ((int)fileHeader.DataOffset - (14 + (int)headerSize + extraBitMasksSize)) / 3);
-                colorTable = new Bgrx32[1 << bmpHeader.BitsPerPixel];
-                colorTableSize = numColors * 3;
-                byte[] temp = new byte[3 * numColors];
-                stream.ReadExactly(temp);
+                int colorTableLength = 1 << bmpHeader.BitsPerPixel;
+                if (bmpHeader.PaletteLength > 0 && bmpHeader.PaletteLength < colorTableLength)
+                    colorTableLength = bmpHeader.PaletteLength;
+                colorTable = new Bgrx32[colorTableLength];
 
-                for (int i = 0; i < numColors; i++)
+                // A malformed bmp file may have less than colorTableLength palette entries.
+                // Instead of throwing an error, try to fill as many entries as possible then leave the remaining entries black.
+
+                int colorEntrySize = bmpHeader is BitmapCoreHeader ? 3 : 4;
+                // Number of bytes between the current file offset and the start of the bitmap (according to the file header)
+                int availableColorTableBytes = (int)fileHeader.DataOffset - (14 + (int)headerSize + extraBitMasksSize);
+                // Max number of entries that can exist in this file. Is <= colorTableLength
+                int numColorEntries = Math.Min(colorTableLength, availableColorTableBytes / colorEntrySize);
+
+                colorTableSize = colorEntrySize * numColorEntries;
+
+                if (bmpHeader is BitmapInfoHeader or OS22xBitmapHeader or OS22xBitmapHeader_16 or IBmpHeaderV2OrAbove)
                 {
-                    colorTable[i] = new Bgrx32(temp[i * 3], temp[i * 3 + 1], temp[i * 3 + 2], 0);
+                    stream.ReadExactly(MemoryMarshal.AsBytes(colorTable.AsSpan())[..colorTableSize]);
+                }
+                else if (bmpHeader is BitmapCoreHeader && bmpHeader.BitsPerPixel is 4 or 8)
+                {
+                    // The entries here are BGR so they're converted to BGRx
+                    for (int i = 0; i < numColorEntries; i++)
+                    {
+                        stream.ReadExactly(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref colorTable[i], 1))[..3]);
+                    }
+                }
+                else
+                {
+                    // Color table wasn't found
+                    colorTable = null;
+                    colorTableSize = 0;
                 }
             }
 

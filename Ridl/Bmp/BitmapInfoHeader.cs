@@ -1,10 +1,5 @@
 ﻿using System.Runtime.InteropServices;
 
-// References:
-// https://en.wikipedia.org/wiki/BMP_file_format
-// https://learn.microsoft.com/en-us/windows/win32/gdi/bitmap-storage
-// https://www.loc.gov/preservation/digital/formats/fdd/fdd000189.shtml
-
 namespace Ridl.Bmp
 {
     /// <remarks>
@@ -20,8 +15,8 @@ namespace Ridl.Bmp
         public readonly bool IsTopDown => _height < 0;
         public readonly int BitsPerPixel => _bitCount;
         public readonly BmpCompressionMethod Format => _compression;
-        public readonly double DpiX => MathHelpers.DpmToDpi(_xPelsPerMeter, 1);
-        public readonly double DpiY => MathHelpers.DpmToDpi(_yPelsPerMeter, 1);
+        public readonly double DpiX => _xPelsPerMeter != 0 ? MathHelpers.DpmToDpi(_xPelsPerMeter, 1) : BmpImage.DEFAULT_DPI;
+        public readonly double DpiY => _yPelsPerMeter != 0 ? MathHelpers.DpmToDpi(_yPelsPerMeter, 1) : BmpImage.DEFAULT_DPI;
         public readonly int PaletteLength => (int)_clrUsed;
 
         private readonly int _width;

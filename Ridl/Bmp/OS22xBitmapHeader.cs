@@ -1,10 +1,5 @@
 ﻿using System.Runtime.InteropServices;
 
-// References:
-// https://en.wikipedia.org/wiki/BMP_file_format
-// https://learn.microsoft.com/en-us/windows/win32/gdi/bitmap-storage
-// https://www.loc.gov/preservation/digital/formats/fdd/fdd000189.shtml
-
 namespace Ridl.Bmp
 {
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
@@ -19,11 +14,11 @@ namespace Ridl.Bmp
         {
             BmpCompressionMethod.BitFields => BmpCompressionMethod.Huffman1D,
             BmpCompressionMethod.Jpeg => BmpCompressionMethod.Rle24,
-            var format => format,
+            _ => _base.Format,
         };
         public readonly double DpiX => _base.DpiX;
         public readonly double DpiY => _base.DpiY;
-        public readonly int PaletteLength => (int)_base.PaletteLength;
+        public readonly int PaletteLength => _base.PaletteLength;
 
         public readonly BmpHalftoneAlgorithm HalftoneAlgorithm => _halftoneAlgorithm;
         public readonly uint HalftoneParam1 => _halftoneParam1;
