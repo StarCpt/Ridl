@@ -5,7 +5,7 @@ namespace Ridl.PixelFormats
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct Rgba32(byte r, byte g, byte b, byte a)
     {
-        public const int Size = 3;
+        public const int Size = 4;
 
         public byte R = r;
         public byte G = g;

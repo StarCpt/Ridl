@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Ridl.PixelFormats;
 
 namespace Ridl
 {
@@ -10,5 +6,10 @@ namespace Ridl
     {
         int Width { get; }
         int Height { get; }
+        int Stride { get; }
+        PixelFormat Format { get; }
+        double DpiX { get; }
+        double DpiY { get; }
+        Rgba32[]? Palette { get; }
     }
 }

@@ -10,14 +10,14 @@ namespace Ridl.Bmp
         public int Height { get; }
         public int Stride { get; }
         public int BitsPerPixel { get; }
-        public BmpPixelFormat Format { get; }
+        public PixelFormat Format { get; }
         public double DpiX { get; }
         public double DpiY { get; }
         public Rgba32[]? Palette { get; }
 
         private readonly byte[] _pixelData;
 
-        internal BmpImage(byte[] pixelData, int width, int height, int stride, BmpPixelFormat format, double dpiX, double dpiY, Bgrx32[]? palette)
+        internal BmpImage(byte[] pixelData, int width, int height, int stride, PixelFormat format, double dpiX, double dpiY, Bgrx32[]? palette)
         {
             _pixelData = pixelData;
             Width = width;

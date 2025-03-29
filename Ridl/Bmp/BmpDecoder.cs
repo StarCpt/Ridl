@@ -10,105 +10,12 @@ using System.Runtime.InteropServices;
 
 namespace Ridl.Bmp
 {
-    internal enum BmpDibHeaderType : uint
+    internal enum BmpHalftoneAlgorithm : ushort
     {
-        BitmapCoreHeader = 12,
-        OS21xBitmapHeader = BitmapCoreHeader, // Same size, only difference is that BitmapCoreHeader stores W/H as Int16 and OS/2 1.x stores it as UInt16
-        OS22xBitmapHeader = 64,
-        OS22xBitmapHeader_Short = 16,
-        BitmapInfoHeader = 40,
-        BitmapV2InfoHeader = 52,
-        BitmapV3InfoHeader = 56,
-        BitmapV4Header = 108,
-        BitmapV5Header = 124,
-    }
-
-    /// <remarks>
-    /// <see href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-wmf/4e588f70-bd92-4a6f-b77f-35d0feaf7a57"/>
-    /// </remarks>
-    internal enum BmpCompressionMethod : uint
-    {
-        Rgb = 0,
-        Rle8 = 1,
-        Rle4 = 2,
-        BitFields = 3,
-        Jpeg = 4,
-        Png = 5,
-        AlphaBitFields = 6, // not in MS docs but mentioned in the wikipedia article
-        Cmyk = 11,
-        CmykRle8 = 12,
-        CmykRle4 = 13,
-    }
-
-    internal struct BmpDibHeader
-    {
-        public BmpDibHeaderType Type;
-
-        public BitmapCoreHeader Core;
-        public BitmapInfoHeader Header;
-        public BitmapV4Header Header4;
-        public BitmapV5Header Header5;
-
-        [StructLayout(LayoutKind.Sequential, Pack = 4)]
-        public struct BitmapCoreHeader
-        {
-            public short Width; // Int16 for Windows 2.x, UInt16 on OS/2 1.x
-            public short Height;
-            public ushort Planes;
-            public ushort BitCount;
-        }
-
-        /// <remarks>
-        /// <see href="https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapinfoheader"/>
-        /// </remarks>
-        [StructLayout(LayoutKind.Sequential, Pack = 4)]
-        public struct BitmapInfoHeader
-        {
-            public int Width;
-            public int Height;
-            public ushort Planes;
-            public ushort BitCount;
-            public BmpCompressionMethod Compression;
-            public uint SizeImage;
-            public int XPelsPerMeter;
-            public int YPelsPerMeter;
-            public uint ClrUsed;
-            public uint ClrImportant;
-
-            public readonly double GetDpiX(int digitsToRoundTo) => MathHelpers.DpmToDpi(XPelsPerMeter, digitsToRoundTo);
-            public readonly double GetDpiY(int digitsToRoundTo) => MathHelpers.DpmToDpi(YPelsPerMeter, digitsToRoundTo);
-        }
-
-        /// <remarks>
-        /// <see href="https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv4header"/>
-        /// </remarks>
-        [StructLayout(LayoutKind.Sequential, Pack = 4)]
-        public struct BitmapV4Header
-        {
-            public uint RedMask;
-            public uint GreenMask;
-            public uint BlueMask;
-            public uint AlphaMask;
-            public uint CSType;
-            public uint RedX,   RedY,   RedZ;
-            public uint GreenX, GreenY, GreenZ;
-            public uint BlueX,  BlueY,  BlueZ;
-            public uint GammaRed;
-            public uint GammaGreen;
-            public uint GammaBlue;
-        }
-
-        /// <remarks>
-        /// <see href="https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv5header"/>
-        /// </remarks>
-        [StructLayout(LayoutKind.Sequential, Pack = 4)]
-        public struct BitmapV5Header
-        {
-            public uint Intent;
-            public uint ProfileData;
-            public uint ProfileSize;
-            private uint Reserved;
-        }
+        None = 0,
+        ErrorDiffusion = 1,
+        PANDA = 2,
+        SuperCircle = 3,
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
@@ -145,41 +52,42 @@ namespace Ridl.Bmp
             return MemoryMarshal.AsRef<BmpFileHeader>(buffer);
         }
 
-        private static BmpDibHeader ReadDibHeader(Stream stream)
+        private static IBmpHeader ReadBmpHeader(Stream stream, out uint headerSize)
         {
-            Span<byte> buffer = stackalloc byte[124];
+            Span<byte> buffer = stackalloc byte[124]; // size of the largest header type
             stream.ReadExactly(buffer[..4]);
 
-            uint dibHeaderSize = BinaryPrimitives.ReadUInt32LittleEndian(buffer);
-            stream.ReadExactly(buffer[4..(int)dibHeaderSize]);
+            headerSize = BinaryPrimitives.ReadUInt32LittleEndian(buffer); // size including the length field
+            stream.ReadExactly(buffer[..(int)(headerSize - 4)]);
 
-            BmpDibHeader dibHeader = new() { Type = (BmpDibHeaderType)dibHeaderSize };
-            switch (dibHeader.Type)
+            // TODO: Create unified header struct - figure out how to handle nonexistent fields in some header types
+
+            switch ((BmpHeaderType)headerSize)
             {
-                case BmpDibHeaderType.BitmapCoreHeader:
-                    dibHeader.Core = MemoryMarshal.AsRef<BmpDibHeader.BitmapCoreHeader>(buffer[4..]);
-                    if (dibHeader.Core.Width <= 0 || dibHeader.Core.Height <= 0)
-                        throw new Exception("This bitmap may be an OS/2 1.x bitmap, which is not supported.");
-                    break;
-                case BmpDibHeaderType.OS22xBitmapHeader: throw new NotImplementedException();
-                case BmpDibHeaderType.OS22xBitmapHeader_Short: throw new NotImplementedException();
-                case BmpDibHeaderType.BitmapInfoHeader:
-                    dibHeader.Header = MemoryMarshal.AsRef<BmpDibHeader.BitmapInfoHeader>(buffer[4..]);
-                    break;
-                case BmpDibHeaderType.BitmapV2InfoHeader: throw new NotImplementedException();
-                case BmpDibHeaderType.BitmapV3InfoHeader: throw new NotImplementedException();
-                case BmpDibHeaderType.BitmapV4Header:
-                    dibHeader.Header = MemoryMarshal.AsRef<BmpDibHeader.BitmapInfoHeader>(buffer[4..]);
-                    dibHeader.Header4 = MemoryMarshal.AsRef<BmpDibHeader.BitmapV4Header>(buffer[(4 + 36)..]);
-                    break;
-                case BmpDibHeaderType.BitmapV5Header:
-                    dibHeader.Header = MemoryMarshal.AsRef<BmpDibHeader.BitmapInfoHeader>(buffer[4..]);
-                    dibHeader.Header4 = MemoryMarshal.AsRef<BmpDibHeader.BitmapV4Header>(buffer[(4 + 36)..]);
-                    dibHeader.Header5 = MemoryMarshal.AsRef<BmpDibHeader.BitmapV5Header>(buffer[(4 + 36 + 68)..]);
-                    break;
-                default: throw new Exception($"Unknown bitmap header type: {dibHeaderSize}.");
+                case BmpHeaderType.BitmapCoreHeader:
+                    var coreHeader = MemoryMarshal.AsRef<BitmapCoreHeader>(buffer);
+                    if (coreHeader.Width <= 0 || coreHeader.Height <= 0)
+                    {
+                        // This bitmap may be an OS/2 1.x bitmap, which stores w/h as UInt16 instead of Int16.
+                        coreHeader = new BitmapCoreHeader(
+                            (short)(coreHeader.Width - short.MinValue),
+                            (short)(coreHeader.Height - short.MinValue),
+                            1, (ushort)coreHeader.BitsPerPixel);
+                    }
+                    return coreHeader;
+                case BmpHeaderType.OS22xBitmapHeader:
+                    var os22xHeader = MemoryMarshal.AsRef<OS22xBitmapHeader>(buffer);
+                    if (os22xHeader.HalftoneAlgorithm != BmpHalftoneAlgorithm.None)
+                        throw new NotImplementedException();
+                    return os22xHeader;
+                case BmpHeaderType.OS22xBitmapHeader_Short: throw new NotImplementedException();
+                case BmpHeaderType.BitmapInfoHeader: return MemoryMarshal.AsRef<BitmapInfoHeader>(buffer);
+                case BmpHeaderType.BitmapV2InfoHeader: return MemoryMarshal.AsRef<BitmapV2InfoHeader>(buffer);
+                case BmpHeaderType.BitmapV3InfoHeader: return MemoryMarshal.AsRef<BitmapV3InfoHeader>(buffer);
+                case BmpHeaderType.BitmapV4Header: return MemoryMarshal.AsRef<BitmapV4Header>(buffer);
+                case BmpHeaderType.BitmapV5Header: return MemoryMarshal.AsRef<BitmapV5Header>(buffer);
+                default: throw new Exception($"Unknown bitmap header type: {headerSize}.");
             }
-            return dibHeader;
         }
 
         private static byte[] ReadUncompressedPixelData(Stream stream, int width, int height, int bpp, bool isTopDown, out int stride)
@@ -203,33 +111,34 @@ namespace Ridl.Bmp
             return pixelData;
         }
 
-        private static BmpImage DecodeRle(Stream stream, in BmpDibHeader.BitmapInfoHeader header, Bgrx32[] colorTable)
+        private static BmpImage DecodeRle(Stream stream, IBmpHeader header, Bgrx32[] colorTable)
         {
-            int stride = (header.Width * header.BitCount + 31) / 32 * 4; // align stride to 4 bytes
+            int stride = (header.Width * header.BitsPerPixel + 31) / 32 * 4; // align stride to 4 bytes
 
-            bool isTopDown = header.Height < 0;
-            int height = int.Abs(header.Height);
+            // technically top-down orientation isn't valid for RLE formats,
+            // but since it's doable just let it use the orientation instead of erroring.
+            bool isTopDown = header.IsTopDown;
 
             byte[] pixelData;
-            BmpPixelFormat format;
-            if (header.Compression is BmpCompressionMethod.Rle8 or BmpCompressionMethod.CmykRle8)
+            PixelFormat format;
+            if (header.Format is BmpCompressionMethod.Rle8 or BmpCompressionMethod.CmykRle8)
             {
-                if (header.BitCount != 8)
-                    throw new Exception($"Bpp must be 8. Bpp={header.BitCount}");
+                if (header.BitsPerPixel != 8)
+                    throw new Exception($"Bpp must be 8. Bpp={header.BitsPerPixel}");
 
-                pixelData = RleBitmapDecoder.DecodeRle8(stream, stride, height, isTopDown);
-                format = BmpPixelFormat.Indexed8;
+                pixelData = RleBitmapDecoder.DecodeRle8(stream, stride, header.Height, isTopDown);
+                format = PixelFormat.Indexed8;
             }
             else // if (dibHeader.Header.Compression is BmpCompressionMethod.Rle4 or BmpCompressionMethod.CmykRle4)
             {
-                if (header.BitCount != 4)
-                    throw new Exception($"Bpp must be 4. Bpp={header.BitCount}");
+                if (header.BitsPerPixel != 4)
+                    throw new Exception($"Bpp must be 4. Bpp={header.BitsPerPixel}");
 
-                pixelData = RleBitmapDecoder.DecodeRle4(stream, stride, height, isTopDown);
-                format = BmpPixelFormat.Indexed4;
+                pixelData = RleBitmapDecoder.DecodeRle4(stream, stride, header.Height, isTopDown);
+                format = PixelFormat.Indexed4;
             }
 
-            return new BmpImage(pixelData, header.Width, header.Height, stride, format, header.GetDpiX(1), header.GetDpiY(1), colorTable);
+            return new BmpImage(pixelData, header.Width, header.Height, stride, format, header.DpiX, header.DpiY, colorTable);
         }
 
         private static byte[] DecodeBitFields16ToRgb24(Stream stream, int width, int height, bool isTopDown, uint maskR, uint maskG, uint maskB, out int stride)
@@ -520,52 +429,44 @@ namespace Ridl.Bmp
             }
         }
 
-        private static BmpImage DecodeBitFields(Stream stream, in BmpDibHeader.BitmapInfoHeader header, uint maskR, uint maskG, uint maskB, uint maskA)
+        private static BmpImage DecodeBitFields(Stream stream, IBmpHeader header, BitFields masks)
         {
-            int width = header.Width;
-            int height = header.Height;
-            double dpiX = header.GetDpiX(1);
-            double dpiY = header.GetDpiY(1);
-
-            bool isTopDown = height < 0;
-            height = int.Abs(height);
-
-            bool containsAlpha = maskA != 0;
+            bool containsAlpha = masks.A != 0;
 
             byte[] pixelData;
             int stride;
-            BmpPixelFormat format;
-            if (header.BitCount == 16)
+            PixelFormat format;
+            if (header.BitsPerPixel == 16)
             {
-                if (((maskR | maskG | maskB | maskA) & 0xffff0000) != 0)
+                if (((masks.R | masks.G | masks.B | masks.A) & 0xffff0000) != 0)
                     throw new Exception("Invalid BitField masks. Only the lower 16 bits should be used on 16bpp.");
 
                 if (!containsAlpha)
                 {
-                    pixelData = DecodeBitFields16ToRgb24(stream, width, height, isTopDown, maskR, maskG, maskB, out stride);
-                    format = BmpPixelFormat.Rgb24;
+                    pixelData = DecodeBitFields16ToRgb24(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, out stride);
+                    format = PixelFormat.Rgb24;
                 }
                 else
                 {
-                    pixelData = DecodeBitFields16ToRgba32(stream, width, height, isTopDown, maskR, maskG, maskB, maskA, out stride);
-                    format = BmpPixelFormat.Rgba32;
+                    pixelData = DecodeBitFields16ToRgba32(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, masks.A, out stride);
+                    format = PixelFormat.Rgba32;
                 }
             }
             else // if (dibHeader.Header.BitCount == 32)
             {
                 if (!containsAlpha)
                 {
-                    pixelData = DecodeBitFields32ToRgb48(stream, width, height, isTopDown, maskR, maskG, maskB, out stride);
-                    format = BmpPixelFormat.Rgb48;
+                    pixelData = DecodeBitFields32ToRgb48(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, out stride);
+                    format = PixelFormat.Rgb48;
                 }
                 else
                 {
-                    pixelData = DecodeBitFields32ToRgba64(stream, width, height, isTopDown, maskR, maskG, maskB, maskA, out stride);
-                    format = BmpPixelFormat.Rgba64;
+                    pixelData = DecodeBitFields32ToRgba64(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, masks.A, out stride);
+                    format = PixelFormat.Rgba64;
                 }
             }
 
-            return new BmpImage(pixelData, width, height, stride, format, dpiX, dpiY, null);
+            return new BmpImage(pixelData, header.Width, header.Height, stride, format, header.DpiX, header.DpiY, null);
         }
 
         /// <summary>
@@ -616,79 +517,56 @@ namespace Ridl.Bmp
             }
         }
 
-        private static BmpImage DecodeRgb(Stream stream, BmpDibHeader dibHeader, Bgrx32[]? colorTable)
+        private static BmpImage DecodeRgb(Stream stream, IBmpHeader header, Bgrx32[]? colorTable)
         {
-            // For uncompressed formats, the origin is bottom-left if y is positive and top-left if y is negative.
-            bool isTopDown = dibHeader.Header.Height < 0;
-            dibHeader.Header.Height = int.Abs(dibHeader.Header.Height);
-
-            int bpp = dibHeader.Type is BmpDibHeaderType.BitmapCoreHeader ? dibHeader.Core.BitCount : dibHeader.Header.BitCount;
-            int width = dibHeader.Type is BmpDibHeaderType.BitmapCoreHeader ? dibHeader.Core.Width : dibHeader.Header.Width;
-            int height = dibHeader.Type is BmpDibHeaderType.BitmapCoreHeader ? dibHeader.Core.Height : dibHeader.Header.Height;
-            double dpiX = dibHeader.Type is BmpDibHeaderType.BitmapCoreHeader ? DEFAULT_BMP_DPI : dibHeader.Header.GetDpiX(1);
-            double dpiY = dibHeader.Type is BmpDibHeaderType.BitmapCoreHeader ? DEFAULT_BMP_DPI : dibHeader.Header.GetDpiY(1);
-
             byte[] pixelData;
-            BmpPixelFormat format;
+            PixelFormat format;
             int stride;
-            switch (bpp)
+            switch (header.BitsPerPixel)
             {
                 case 1:
                 case 2:
                 case 4:
                 case 8:
-                    pixelData = ReadUncompressedPixelData(stream, width, height, bpp, isTopDown, out stride);
-                    format = bpp switch
+                    pixelData = ReadUncompressedPixelData(stream, header.Width, header.Height, header.BitsPerPixel, header.IsTopDown, out stride);
+                    format = header.BitsPerPixel switch
                     {
-                        1 => BmpPixelFormat.Indexed1,
-                        2 => BmpPixelFormat.Indexed2,
-                        4 => BmpPixelFormat.Indexed4,
-                        _ => BmpPixelFormat.Indexed8, // 8bpp
+                        1 => PixelFormat.Indexed1,
+                        2 => PixelFormat.Indexed2,
+                        4 => PixelFormat.Indexed4,
+                        _ => PixelFormat.Indexed8, // 8bpp
                     };
                     break;
                 case 16:
-                    pixelData = DecodeRgb16ToRgb24(stream, width, height, out stride);
-                    format = BmpPixelFormat.Rgb24;
+                    pixelData = DecodeRgb16ToRgb24(stream, header.Width, header.Height, out stride);
+                    format = PixelFormat.Rgb24;
                     break;
                 case 24:
-                    pixelData = ReadUncompressedPixelData(stream, width, height, bpp, isTopDown, out stride);
-                    format = BmpPixelFormat.Bgr24;
+                    pixelData = ReadUncompressedPixelData(stream, header.Width, header.Height, header.BitsPerPixel, header.IsTopDown, out stride);
+                    format = PixelFormat.Bgr24;
                     break;
                 case 32:
-                    pixelData = DecodeBgrx32ToRgb24(stream, width, height, isTopDown, out stride);
-                    format = BmpPixelFormat.Rgb24;
+                    pixelData = DecodeBgrx32ToRgb24(stream, header.Width, header.Height, header.IsTopDown, out stride);
+                    format = PixelFormat.Rgb24;
                     break;
-                default: throw new Exception($"Invalid bit depth: {bpp}");
+                case 64:
+                    // This may contain 16-bit HDR values, in which case the brightness will be incorrect.
+                    pixelData = ReadUncompressedPixelData(stream, header.Width, header.Height, header.BitsPerPixel, header.IsTopDown, out stride);
+                    format = PixelFormat.Rgba64;
+                    break;
+                default: throw new Exception($"Invalid bit depth: {header.BitsPerPixel}");
             }
 
-            var image = new BmpImage(pixelData, width, height, stride, format, dpiX, dpiY, colorTable);
+            var image = new BmpImage(pixelData, header.Width, header.Height, stride, format, header.DpiX, header.DpiY, colorTable);
             return image;
         }
 
-        private static void InitializeDefaultHeaderFields(ref BmpDibHeader dibHeader)
+        private struct BitFields
         {
-            if (dibHeader.Type is BmpDibHeaderType.BitmapInfoHeader or BmpDibHeaderType.BitmapV4Header or BmpDibHeaderType.BitmapV5Header)
-            {
-                // When certain fields are 0, set them to their default values
-                if (dibHeader.Header.BitCount <= 8 && dibHeader.Header.ClrUsed == 0)
-                    dibHeader.Header.ClrUsed = 1u << dibHeader.Header.BitCount;
-
-                if (dibHeader.Header.XPelsPerMeter == 0)
-                    dibHeader.Header.XPelsPerMeter = MathHelpers.DpiToDpm(DEFAULT_BMP_DPI);
-
-                if (dibHeader.Header.YPelsPerMeter == 0)
-                    dibHeader.Header.YPelsPerMeter = MathHelpers.DpiToDpm(DEFAULT_BMP_DPI);
-
-                if (dibHeader.Header.SizeImage == 0)
-                {
-                    // The decoder should auto determine the image size depending on bit depth (aligned stride * height). Only valid for RGB format.
-                    if (dibHeader.Header.Compression is not BmpCompressionMethod.Rgb)
-                        throw new Exception("Image size cannot be 0 for non-RGB formats.");
-
-                    int stride = (dibHeader.Header.Width * dibHeader.Header.BitCount + 31) / 32 * 4;
-                    dibHeader.Header.SizeImage = (uint)(stride * dibHeader.Header.Height);
-                }
-            }
+            public uint R;
+            public uint G;
+            public uint B;
+            public uint A;
         }
 
         public IImage Decode(Stream stream)
@@ -703,54 +581,62 @@ namespace Ridl.Bmp
                 throw new InvalidDataException("The stream doesn't contain a valid BMP file signature.");
 
             BmpFileHeader fileHeader = ReadFileHeader(stream);
-            BmpDibHeader dibHeader = ReadDibHeader(stream);
-
-            InitializeDefaultHeaderFields(ref dibHeader);
+            IBmpHeader bmpHeader = ReadBmpHeader(stream, out uint headerSize);
 
             int extraBitMasksSize = 0;
-            bool hasAlphaBitMask = false;
-            Span<uint> bitFields = stackalloc uint[4];
-            if (dibHeader.Header.Compression is BmpCompressionMethod.BitFields)
+            BitFields bitFields = default;
+            if (bmpHeader.Format is BmpCompressionMethod.BitFields or BmpCompressionMethod.AlphaBitFields)
             {
-                if (dibHeader.Type is BmpDibHeaderType.BitmapInfoHeader)
+                if (bmpHeader is BitmapInfoHeader)
                 {
-                    if (dibHeader.Header.BitCount is not 16 and not 32)
+                    if (bmpHeader.BitsPerPixel is not 16 and not 32)
                     {
-                        throw new Exception($"{nameof(BmpCompressionMethod)}.{BmpCompressionMethod.BitFields} is only valid with 16 or 32 bpp. Bpp={dibHeader.Header.BitCount}");
+                        throw new Exception($"Format {BmpCompressionMethod.BitFields} is only valid for 16 or 32 bpp. Bpp={bmpHeader.BitsPerPixel}");
                     }
 
-                    extraBitMasksSize = sizeof(uint) * 3;
-
-                    // Read extra bit masks
-                    stream.ReadExactly(MemoryMarshal.AsBytes(bitFields[..3]));
+                    if (bmpHeader.Format is BmpCompressionMethod.BitFields)
+                    {
+                        // Read extra bit masks
+                        extraBitMasksSize = sizeof(uint) * 3;
+                        stream.ReadExactly(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref bitFields, 1))[..extraBitMasksSize]);
+                    }
+                    else
+                    {
+                        extraBitMasksSize = sizeof(uint) * 4;
+                        stream.ReadExactly(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref bitFields, 1))[..extraBitMasksSize]);
+                    }
                 }
-                else if (dibHeader.Type is BmpDibHeaderType.BitmapV4Header or BmpDibHeaderType.BitmapV5Header)
+                else if (bmpHeader is IBmpHeaderV2OrAbove v2Header)
                 {
-                    bitFields[0] = dibHeader.Header4.RedMask;
-                    bitFields[1] = dibHeader.Header4.GreenMask;
-                    bitFields[2] = dibHeader.Header4.BlueMask;
-                    bitFields[3] = dibHeader.Header4.AlphaMask;
-                    hasAlphaBitMask = (dibHeader.Header4.AlphaMask & uint.MaxValue) != 0;
+                    bitFields.R = v2Header.RedMask;
+                    bitFields.G = v2Header.GreenMask;
+                    bitFields.B = v2Header.BlueMask;
+
+                    if (bmpHeader is IBmpHeaderV3OrAbove v3Header)
+                    {
+                        bitFields.A = v3Header.AlphaMask;
+                    }
                 }
             }
 
             Bgrx32[]? colorTable = null;
             int colorTableSize = 0;
-            if (dibHeader.Type is BmpDibHeaderType.BitmapInfoHeader or BmpDibHeaderType.BitmapV4Header or BmpDibHeaderType.BitmapV5Header && dibHeader.Header.ClrUsed > 0
-                && dibHeader.Header.Compression is not BmpCompressionMethod.Png and not BmpCompressionMethod.Jpeg)
+            if (bmpHeader is BitmapInfoHeader or OS22xBitmapHeader or IBmpHeaderV2OrAbove && bmpHeader.PaletteLength > 0 && bmpHeader.Format is not BmpCompressionMethod.Png and not BmpCompressionMethod.Jpeg)
             {
-                // Read color table
-                colorTable = new Bgrx32[Math.Min(1 << dibHeader.Header.BitCount, dibHeader.Header.ClrUsed)];
-                colorTableSize = colorTable.Length * 4;
-                Span<byte> colorTableBytes = MemoryMarshal.AsBytes(colorTable.AsSpan());
+                // A malformed bmp file may have less or more than bmpHeader.PaletteLength palette entries.
+                // Instead of throwing an error, try to fill as many entries as possible then leave the remaining entries black.
+                int maxNumColors = Math.Min(1 << bmpHeader.BitsPerPixel, ((int)fileHeader.DataOffset - (14 + (int)headerSize + extraBitMasksSize)) / 4);
+                colorTable = new Bgrx32[Math.Min(1 << bmpHeader.BitsPerPixel, bmpHeader.PaletteLength)];
+                colorTableSize = Math.Min(maxNumColors, bmpHeader.PaletteLength) * 4;
+                Span<byte> colorTableBytes = MemoryMarshal.AsBytes(colorTable.AsSpan())[..colorTableSize];
                 stream.ReadExactly(colorTableBytes);
             }
-            else if (dibHeader.Type is BmpDibHeaderType.BitmapCoreHeader && dibHeader.Core.BitCount is 4 or 8)
+            else if (bmpHeader is BitmapCoreHeader && bmpHeader.BitsPerPixel is 4 or 8)
             {
                 // A malformed bmp file may have less than 2^n palette entries.
                 // Instead of throwing an error, try to fill as many entries as possible then leave the remaining entries black.
-                int numColors = Math.Min(((int)fileHeader.DataOffset - (14 + (int)dibHeader.Type + extraBitMasksSize)) / 3, 1 << dibHeader.Core.BitCount);
-                colorTable = new Bgrx32[1 << dibHeader.Core.BitCount];
+                int numColors = Math.Min(1 << bmpHeader.BitsPerPixel, ((int)fileHeader.DataOffset - (14 + (int)headerSize + extraBitMasksSize)) / 3);
+                colorTable = new Bgrx32[1 << bmpHeader.BitsPerPixel];
                 colorTableSize = numColors * 3;
                 byte[] temp = new byte[3 * numColors];
                 stream.ReadExactly(temp);
@@ -761,70 +647,64 @@ namespace Ridl.Bmp
                 }
             }
 
-            int currentFileOffset = 14 + (int)dibHeader.Type + extraBitMasksSize + colorTableSize;
+            int currentFileOffset = 14 + (int)headerSize + extraBitMasksSize + colorTableSize;
             stream.ReadDiscard((int)(fileHeader.DataOffset - currentFileOffset));
 
             if (currentFileOffset > fileHeader.DataOffset)
-                throw new Exception("An error occured while reading bitmap metadata.");
+                throw new Exception("An error occurred while reading bitmap metadata.");
 
-            if (dibHeader.Type is BmpDibHeaderType.BitmapV5Header && dibHeader.Header5.ProfileSize > 0)
-            {
-                throw new NotImplementedException();
-            }
-
-            if (dibHeader.Header.Compression is BmpCompressionMethod.Jpeg)
+            IImage image;
+            if (bmpHeader.Format is BmpCompressionMethod.Jpeg)
             {
                 // TODO: Implement JPEG decoding
                 throw new NotImplementedException();
             }
-            else if (dibHeader.Header.Compression is BmpCompressionMethod.Png)
+            else if (bmpHeader.Format is BmpCompressionMethod.Png)
             {
-                return Ridl.Png.PngDecoder.Default.Decode(stream);
+                image = Ridl.Png.PngDecoder.Default.Decode(stream);
             }
-            else if (dibHeader.Header.Compression is BmpCompressionMethod.BitFields)
+            else if (bmpHeader.Format is BmpCompressionMethod.BitFields or BmpCompressionMethod.AlphaBitFields)
             {
-                return DecodeBitFields(stream, dibHeader.Header, bitFields[0], bitFields[1], bitFields[2], bitFields[3]);
+                image = DecodeBitFields(stream, bmpHeader, bitFields);
             }
-            else if (dibHeader.Header.Compression is BmpCompressionMethod.AlphaBitFields)
+            else if (bmpHeader.Format is BmpCompressionMethod.Rgb)
+            {
+                image = DecodeRgb(stream, bmpHeader, colorTable);
+            }
+            else if (bmpHeader.Format is BmpCompressionMethod.Cmyk)
             {
                 throw new NotImplementedException();
             }
-            else if (dibHeader.Header.Compression is BmpCompressionMethod.Rgb)
+            else if (bmpHeader.Format is BmpCompressionMethod.Rle8 or BmpCompressionMethod.Rle4 or BmpCompressionMethod.CmykRle8 or BmpCompressionMethod.CmykRle4)
             {
-                return DecodeRgb(stream, dibHeader, colorTable);
+                image = DecodeRle(stream, bmpHeader, colorTable ?? throw new Exception("Indexed formats must contain a color table."));
             }
-            else if (dibHeader.Header.Compression is BmpCompressionMethod.Cmyk)
+            else if (bmpHeader.Format is BmpCompressionMethod.Huffman1D)
             {
-                // For uncompressed formats, the origin is bottom-left if y is positive and top-left if y is negative.
-                bool isTopDown = dibHeader.Header.Height < 0;
-                dibHeader.Header.Height = int.Abs(dibHeader.Header.Height);
-
                 throw new NotImplementedException();
-
-                //pixelData = ReadUncompressedPixelData(stream, dibHeader.Header, isTopDown, out stride);
             }
-            else if (dibHeader.Header.Compression is BmpCompressionMethod.Rle8 or BmpCompressionMethod.Rle4 or BmpCompressionMethod.CmykRle8 or BmpCompressionMethod.CmykRle4)
+            else if (bmpHeader.Format is BmpCompressionMethod.Rle24)
             {
-                return DecodeRle(stream, dibHeader.Header, colorTable ?? throw new Exception("Indexed formats must contain a color table."));
+                throw new NotImplementedException();
             }
             else
             {
                 throw new InvalidDataException("Unknown BMP compression type.");
             }
 
-            if (dibHeader.Type is BmpDibHeaderType.BitmapV5Header && dibHeader.Header5.ProfileSize > 0)
+            if (bmpHeader is BitmapV5Header v5Header && v5Header.ProfileSize > 0)
             {
-                currentFileOffset = (int)(fileHeader.DataOffset + dibHeader.Header.SizeImage);
-                stream.ReadDiscard((int)((14 + dibHeader.Header5.ProfileData) - currentFileOffset));
-
+                currentFileOffset = (int)(fileHeader.DataOffset + v5Header.SizeImage);
+                stream.ReadDiscard((int)((14 + v5Header.ProfileData) - currentFileOffset));
+            
                 // Read ICC Color Profile
-                byte[] colorProfileData = new byte[dibHeader.Header5.ProfileSize];
+                byte[] colorProfileData = new byte[v5Header.ProfileSize];
                 stream.ReadExactly(colorProfileData);
+
+                //throw new NotImplementedException();
             }
 
-            throw new NotImplementedException();
-            //var image = new BmpImage(pixelData,);
-            //return image;
+            return image;
         }
     }
 }

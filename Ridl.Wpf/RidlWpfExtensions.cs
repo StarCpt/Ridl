@@ -1,9 +1,12 @@
 ﻿using Ridl.Bmp;
+using Ridl.PixelFormats;
 using Ridl.Png;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using PixelFormat = Ridl.PixelFormats.PixelFormat;
+using WpfPixelFormat = System.Windows.Media.PixelFormat;
 using WpfPixelFormats = System.Windows.Media.PixelFormats;
 
 namespace Ridl.Wpf
@@ -12,7 +15,7 @@ namespace Ridl.Wpf
     {
         private static BitmapSource CreateBitmapSource(byte[] pixelData, int width, int height, int bitDepth, PngPixelFormat format, PngPaletteColor[]? palette, PngTransparency? transparency, PngPixelDimensions? pixelDimensions)
         {
-            PixelFormat wpfFormat;
+            WpfPixelFormat wpfFormat;
             BitmapPalette? wpfPalette = null;
             if (format is PngPixelFormat.Grayscale)
             {
@@ -275,22 +278,21 @@ namespace Ridl.Wpf
 
         public static BitmapSource ToBitmapSource(this BmpImage image)
         {
-            PixelFormat format;
+            WpfPixelFormat format;
             BitmapPalette? palette = null;
             byte[] pixelData = image.PixelData;
 
             format = image.Format switch
             {
-                BmpPixelFormat.Rgb24 => WpfPixelFormats.Rgb24,
-                BmpPixelFormat.Rgb48 => WpfPixelFormats.Rgb48,
-                BmpPixelFormat.Rgba32 => WpfPixelFormats.Bgra32,
-                BmpPixelFormat.Rgba64 => WpfPixelFormats.Rgba64,
-                BmpPixelFormat.Bgr24 => WpfPixelFormats.Bgr24,
-                BmpPixelFormat.Indexed1 => WpfPixelFormats.Indexed1,
-                BmpPixelFormat.Indexed2 => WpfPixelFormats.Indexed2,
-                BmpPixelFormat.Indexed4 => WpfPixelFormats.Indexed4,
-                BmpPixelFormat.Indexed8 => WpfPixelFormats.Indexed8,
-                BmpPixelFormat.Cmyk32 => WpfPixelFormats.Cmyk32,
+                PixelFormat.Rgb24 => WpfPixelFormats.Rgb24,
+                PixelFormat.Rgb48 => WpfPixelFormats.Rgb48,
+                PixelFormat.Rgba32 => WpfPixelFormats.Bgra32,
+                PixelFormat.Rgba64 => WpfPixelFormats.Rgba64,
+                PixelFormat.Bgr24 => WpfPixelFormats.Bgr24,
+                PixelFormat.Indexed1 => WpfPixelFormats.Indexed1,
+                PixelFormat.Indexed2 => WpfPixelFormats.Indexed2,
+                PixelFormat.Indexed4 => WpfPixelFormats.Indexed4,
+                PixelFormat.Indexed8 => WpfPixelFormats.Indexed8,
                 _ => throw new Exception($"Invalid pixel format: {image.Format}"),
             };
 
@@ -299,7 +301,7 @@ namespace Ridl.Wpf
                 palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
             }
 
-            if (image.Format is BmpPixelFormat.Rgba32)
+            if (image.Format is PixelFormat.Rgba32)
             {
                 pixelData = image.PixelData.ToArray();
                 RgbaToBgra32(ref pixelData, image.Width, image.Height, image.Stride);
@@ -315,7 +317,7 @@ namespace Ridl.Wpf
                 Span<byte> scanline = pixelData.AsSpan(stride * y, stride);
                 for (int x = 0; x < width; x++)
                 {
-                    (scanline[x], scanline[x + 2]) = (scanline[x + 2], scanline[x]);
+                    (scanline[x * 4], scanline[x * 4 + 2]) = (scanline[x * 4 + 2], scanline[x * 4]);
                 }
             }
         }
