@@ -4,12 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
     <Title>$(AssemblyName)</Title>
     <Description>Fast image decoding library for .NET.</Description>
     <Authors>StarCpt</Authors>
-    <VersionPrefix>1.0.1</VersionPrefix>
-    <VersionSuffix>beta</VersionSuffix>
+    <VersionPrefix>1.1.0</VersionPrefix>
+    <VersionSuffix>alpha</VersionSuffix>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
     <PackageProjectUrl>https://github.com/StarCpt/Ridl</PackageProjectUrl>
