@@ -464,15 +464,15 @@ namespace Ridl.Png
         /// <returns>Decoded pixel data.</returns>
         /// <exception cref="Exception"></exception>
         /// <exception cref="InvalidDataException"></exception>
-        public byte[] Decode(Stream pngStream, out PngMetadata metadata)
+        private byte[] Decode(Stream pngStream, out PngMetadata metadata)
         {
             if (!pngStream.CanRead)
                 throw new Exception($"{nameof(pngStream)} does not support reading.");
 
-            Span<byte> header = stackalloc byte[8];
-            pngStream.ReadExactly(header);
+            Span<byte> signature = stackalloc byte[8];
+            pngStream.ReadExactly(signature);
 
-            if (!CheckSignature(header))
+            if (!CheckSignature(signature))
                 throw new Exception($"Provided {nameof(pngStream)} does not contain a valid signature.");
 
             metadata = ReadHeaderChunk(pngStream);

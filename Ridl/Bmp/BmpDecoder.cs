@@ -17,6 +17,8 @@ namespace Ridl.Bmp
 
     public class BmpDecoder
     {
+        public static BmpDecoder Default { get; } = new BmpDecoder();
+
         private static bool CheckSignature(Stream stream)
         {
             Span<byte> sig = [ 0x42, 0x4d ];
@@ -279,21 +281,9 @@ namespace Ridl.Bmp
             public uint A;
         }
 
-        public IImage Decode(Stream stream)
+        private static BitFields TryReadBitFields(Stream stream, IBmpHeader bmpHeader, out int extraBitMasksSize)
         {
-            if (!BitConverter.IsLittleEndian)
-                throw new Exception("Big endian systems are not supported.");
-
-            if (!stream.CanRead)
-                throw new ArgumentException($"Provided stream {stream} does not support reading.");
-
-            if (!CheckSignature(stream))
-                throw new InvalidDataException("The stream doesn't contain a valid BMP file signature.");
-
-            BmpFileHeader fileHeader = ReadFileHeader(stream);
-            IBmpHeader bmpHeader = ReadBmpHeader(stream, out uint headerSize);
-
-            int extraBitMasksSize = 0;
+            extraBitMasksSize = 0;
             BitFields bitFields = default;
             if (bmpHeader.Format is BmpCompressionMethod.BitFields or BmpCompressionMethod.AlphaBitFields)
             {
@@ -328,9 +318,13 @@ namespace Ridl.Bmp
                     }
                 }
             }
+            return bitFields;
+        }
 
+        private static Bgrx32[]? TryReadColorTable(Stream stream, BmpFileHeader fileHeader, int currentOffsetInFile, IBmpHeader bmpHeader, out int colorTableSize)
+        {
+            colorTableSize = 0;
             Bgrx32[]? colorTable = null;
-            int colorTableSize = 0;
             // Check PNG and JPEG since they may erroneously claim to contain a palette with one or more colors
             if (bmpHeader.BitsPerPixel is 1 or 2 or 4 or 8 && bmpHeader.Format is not BmpCompressionMethod.Png and not BmpCompressionMethod.Jpeg)
             {
@@ -344,7 +338,7 @@ namespace Ridl.Bmp
 
                 int colorEntrySize = bmpHeader is BitmapCoreHeader ? 3 : 4;
                 // Number of bytes between the current file offset and the start of the bitmap (according to the file header)
-                int availableColorTableBytes = (int)fileHeader.DataOffset - (14 + (int)headerSize + extraBitMasksSize);
+                int availableColorTableBytes = (int)fileHeader.DataOffset - currentOffsetInFile;
                 // Max number of entries that can exist in this file. Is <= colorTableLength
                 int numColorEntries = Math.Min(colorTableLength, availableColorTableBytes / colorEntrySize);
 
@@ -369,14 +363,33 @@ namespace Ridl.Bmp
                     colorTableSize = 0;
                 }
             }
+            return colorTable;
+        }
 
-            int currentFileOffset = 14 + (int)headerSize + extraBitMasksSize + colorTableSize;
-            stream.ReadDiscard((int)(fileHeader.DataOffset - currentFileOffset));
+        public BmpImage Decode(Stream stream)
+        {
+            if (!BitConverter.IsLittleEndian)
+                throw new Exception("Big endian systems are not supported.");
 
-            if (currentFileOffset > fileHeader.DataOffset)
+            if (!stream.CanRead)
+                throw new ArgumentException($"Provided stream {stream} does not support reading.");
+
+            if (!CheckSignature(stream))
+                throw new InvalidDataException("The stream doesn't contain a valid BMP file signature.");
+
+            BmpFileHeader fileHeader = ReadFileHeader(stream);
+            IBmpHeader bmpHeader = ReadBmpHeader(stream, out uint headerSize);
+
+            BitFields bitFields = TryReadBitFields(stream, bmpHeader, out int extraBitMasksSize);
+            Bgrx32[]? colorTable = TryReadColorTable(stream, fileHeader, 14 + (int)headerSize + extraBitMasksSize, bmpHeader, out int colorTableSize);
+
+            int currentOffsetInFile = 14 + (int)headerSize + extraBitMasksSize + colorTableSize;
+            stream.ReadDiscard((int)(fileHeader.DataOffset - currentOffsetInFile));
+
+            if (currentOffsetInFile > fileHeader.DataOffset)
                 throw new Exception("An error occurred while reading bitmap metadata.");
 
-            IImage image;
+            BmpImage image;
             if (bmpHeader.Format is BmpCompressionMethod.Jpeg)
             {
                 // TODO: Implement JPEG decoding
@@ -384,7 +397,8 @@ namespace Ridl.Bmp
             }
             else if (bmpHeader.Format is BmpCompressionMethod.Png)
             {
-                image = Ridl.Png.PngDecoder.Default.Decode(stream);
+                //image = Ridl.Png.PngDecoder.Default.Decode(stream);
+                throw new NotImplementedException();
             }
             else if (bmpHeader.Format is BmpCompressionMethod.BitFields or BmpCompressionMethod.AlphaBitFields)
             {
@@ -396,6 +410,7 @@ namespace Ridl.Bmp
             }
             else if (bmpHeader.Format is BmpCompressionMethod.Cmyk)
             {
+                // not sure if CMYK bmps are even valid?
                 throw new NotImplementedException();
             }
             else if (bmpHeader.Format is BmpCompressionMethod.Rle8 or BmpCompressionMethod.Rle4 or BmpCompressionMethod.CmykRle8 or BmpCompressionMethod.CmykRle4)
@@ -412,14 +427,14 @@ namespace Ridl.Bmp
             }
             else
             {
-                throw new InvalidDataException("Unknown BMP compression type.");
+                throw new InvalidDataException("Unknown BMP format.");
             }
 
             // Read embedded ICC profile
             if (bmpHeader is BitmapV5Header v5Header && v5Header.ColorSpace is BmpColorSpace.LCS_PROFILE_EMBEDDED && v5Header.ProfileSize > 0)
             {
-                currentFileOffset = (int)(fileHeader.DataOffset + v5Header.SizeImage);
-                stream.ReadDiscard((int)(14 + v5Header.ProfileData - currentFileOffset));
+                currentOffsetInFile = (int)(fileHeader.DataOffset + v5Header.SizeImage);
+                stream.ReadDiscard((int)(14 + v5Header.ProfileData - currentOffsetInFile));
 
                 // Read ICC Color Profile
                 byte[] colorProfileData = new byte[v5Header.ProfileSize];

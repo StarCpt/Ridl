@@ -6,8 +6,7 @@ namespace Ridl.Bmp
     {
         public const double DEFAULT_DPI = 96;
 
-        public byte[] PixelData => _pixelData;
-
+        public Span<byte> PixelData => _pixelData;
         public int Width { get; }
         public int Height { get; }
         public int Stride { get; }
@@ -32,6 +31,14 @@ namespace Ridl.Bmp
 
             if (format.IsIndexed() && palette is null)
                 throw new Exception($"Indexed formats must contain a palette. Format: {format}");
+        }
+
+        public Span<byte> GetRow(int row)
+        {
+            if (row < 0 || row >= Height)
+                throw new ArgumentOutOfRangeException(nameof(row));
+
+            return _pixelData.AsSpan(row * Stride);
         }
     }
 }

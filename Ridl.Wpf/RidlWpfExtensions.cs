@@ -13,8 +13,16 @@ namespace Ridl.Wpf
 {
     public static class RidlWpfExtensions
     {
-        private static BitmapSource CreateBitmapSource(byte[] pixelData, int width, int height, int bitDepth, PngPixelFormat format, PngPaletteColor[]? palette, PngTransparency? transparency, PngPixelDimensions? pixelDimensions)
+        public static BitmapSource ToBitmapSource(this PngImage image)
         {
+            int bitDepth = image.BitDepth;
+            byte[]? pixelData = image.PixelData;
+            var format = image.Format;
+            var transparency = image.Transparency;
+            var palette = image.Palette;
+            int width = image.Width;
+            int height = image.Height;
+
             WpfPixelFormat wpfFormat;
             BitmapPalette? wpfPalette = null;
             if (format is PngPixelFormat.Grayscale)
@@ -231,10 +239,8 @@ namespace Ridl.Wpf
                     case 8:
                         // There is no Rgba32 PixelFormat in wpf so the pixels need to be converted to Bgra32
                         wpfFormat = WpfPixelFormats.Bgra32;
-                        for (int i = 0; i < pixelData.Length; i += 4)
-                        {
-                            (pixelData[i], pixelData[i + 2]) = (pixelData[i + 2], pixelData[i]);
-                        }
+                        Span<byte> pixelDataSpan = pixelData;
+                        Rgba32ToBgra32(ref pixelDataSpan, width, height, image.Stride);
                         break;
                     case 16: wpfFormat = WpfPixelFormats.Rgba64; break;
                     default: throw new Exception($"Invalid bit depth for {format} format. BitDepth={bitDepth}");
@@ -245,44 +251,17 @@ namespace Ridl.Wpf
                 throw new Exception($"Invalid pixel format: Format={format}");
             }
 
-            double dpiX = 96, dpiY = 96;
-            if (pixelDimensions is PngPixelDimensions dims)
-            {
-                if (dims.Units is PngPixelUnit.Unknown)
-                {
-                    double aspectRatio = (double)dims.PixelsPerUnitX / dims.PixelsPerUnitY;
-                    dpiX *= aspectRatio;
-                }
-                else if (dims.Units is PngPixelUnit.Meter)
-                {
-                    dpiX = double.Round(dims.PixelsPerUnitX / 39.3700787402, 1);
-                    dpiY = double.Round(dims.PixelsPerUnitY / 39.3700787402, 1);
-                }
-            }
-
             int stride = MathHelpers.DivRoundUp(width * wpfFormat.BitsPerPixel, 8);
-            BitmapSource bitmap = BitmapSource.Create(width, height, dpiX, dpiY, wpfFormat, wpfPalette, pixelData, stride);
+            BitmapSource bitmap = BitmapSource.Create(width, height, image.DpiX, image.DpiY, wpfFormat, wpfPalette, pixelData, stride);
             return bitmap;
         }
 
-        public static BitmapSource DecodeToBitmapSource(this PngDecoder decoder, Stream pngStream)
+        public static unsafe BitmapSource ToBitmapSource(this BmpImage image)
         {
-            byte[] pixelData = decoder.Decode(pngStream, out PngMetadata metadata);
-            return CreateBitmapSource(pixelData, metadata.Width, metadata.Height, metadata.BitDepth, metadata.Format, metadata.Palette, metadata.Transparency, metadata.PixelDimensions);
-        }
+            WpfPixelFormat wpfFormat;
+            BitmapPalette? wpfPalette = null;
 
-        public static BitmapSource ToBitmapSource(this PngImage image)
-        {
-            return CreateBitmapSource(image.PixelData, image.Width, image.Height, image.BitDepth, image.Format, image.Palette, image.Transparency, image.PixelDimensions);
-        }
-
-        public static BitmapSource ToBitmapSource(this BmpImage image)
-        {
-            WpfPixelFormat format;
-            BitmapPalette? palette = null;
-            byte[] pixelData = image.PixelData;
-
-            format = image.Format switch
+            wpfFormat = image.Format switch
             {
                 PixelFormat.Rgb24 => WpfPixelFormats.Rgb24,
                 PixelFormat.Rgb48 => WpfPixelFormats.Rgb48,
@@ -298,43 +277,33 @@ namespace Ridl.Wpf
 
             if (image.Format.IsIndexed())
             {
-                palette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
+                wpfPalette = new BitmapPalette(image.Palette!.Select(i => Color.FromRgb(i.R, i.G, i.B)).ToArray());
             }
 
+            Span<byte> pixelData = image.PixelData;
             if (image.Format is PixelFormat.Rgba32)
             {
-                pixelData = image.PixelData.ToArray();
-                RgbaToBgra32(ref pixelData, image.Width, image.Height, image.Stride);
+                pixelData = pixelData.ToArray(); // copy the array for modification without changing the src image
+                Rgba32ToBgra32(ref pixelData, image.Width, image.Height, image.Stride);
             }
 
-            return BitmapSource.Create(image.Width, image.Height, image.DpiX, image.DpiY, format, palette, pixelData, image.Stride);
+            // BitmapSource.Create takes an array or IntPtr. Since pixelData is a span (maybe wrapping an array or not)
+            // pin it and get the first elemenet's address as IntPtr
+            fixed (byte* pixelDataPtr = pixelData)
+            {
+                return BitmapSource.Create(image.Width, image.Height, image.DpiX, image.DpiY, wpfFormat, wpfPalette, (IntPtr)pixelDataPtr, pixelData.Length, image.Stride);
+            }
         }
 
-        private static void RgbaToBgra32(ref byte[] pixelData, int width, int height, int stride)
+        private static void Rgba32ToBgra32(ref Span<byte> pixelData, int width, int height, int stride)
         {
             for (int y = 0; y < height; y++)
             {
-                Span<byte> scanline = pixelData.AsSpan(stride * y, stride);
+                Span<byte> scanline = pixelData.Slice(stride * y, stride);
                 for (int x = 0; x < width; x++)
                 {
                     (scanline[x * 4], scanline[x * 4 + 2]) = (scanline[x * 4 + 2], scanline[x * 4]);
                 }
-            }
-        }
-
-        public static BitmapSource ToBitmapSource(this IImage image)
-        {
-            if (image is PngImage png)
-            {
-                return png.ToBitmapSource();
-            }
-            else if (image is BmpImage bmp)
-            {
-                return bmp.ToBitmapSource();
-            }
-            else
-            {
-                throw new Exception("Unsupported image type.");
             }
         }
     }
