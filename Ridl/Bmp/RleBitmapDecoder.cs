@@ -134,5 +134,66 @@ namespace Ridl.Bmp
 
             return pixelData;
         }
+
+        // RLE24 compression details: https://www.fileformat.info/format/os2bmp/egff.htm
+        public static byte[] DecodeRle24(Stream stream, int stride, int height, bool isTopDown)
+        {
+            byte[] pixelData = new byte[stride * height];
+            Span<byte> buffer = stackalloc byte[4];
+            int x = 0, y = isTopDown ? 0 : (height - 1);
+            Span<byte> scanline = pixelData.AsSpan(stride * y, stride);
+            while (true)
+            {
+                stream.ReadExactly(buffer[..2]);
+
+                if (buffer[0] > 0) // Encoded mode
+                {
+                    byte runLength = buffer[0];
+                    stream.ReadExactly(buffer[2..4]);
+
+                    for (int i = 0; i < runLength; i++, x++)
+                    {
+                        scanline[x * 3] = buffer[1];
+                        scanline[x * 3 + 1] = buffer[2];
+                        scanline[x * 3 + 2] = buffer[3];
+                    }
+                }
+                else
+                {
+                    if (buffer[1] == 0) // End of line
+                    {
+                        x = 0;
+                        y = isTopDown ? (y + 1) : (y - 1);
+                        scanline = pixelData.AsSpan(stride * y, stride);
+                        continue;
+                    }
+                    else if (buffer[1] == 1) // End of bitmap
+                    {
+                        break; // Exit while loop
+                    }
+                    else if (buffer[1] == 2) // Delta (Relative) mode
+                    {
+                        stream.ReadExactly(buffer);
+
+                        byte relX = buffer[0];
+                        byte relY = buffer[1];
+
+                        x += relX;
+                        y = isTopDown ? (y + relY) : (y - relY);
+                    }
+                    else // Absolute mode
+                    {
+                        byte runLength = buffer[1];
+                        stream.ReadExactly(scanline.Slice(x * 3, runLength * 3));
+                        x += runLength;
+
+                        int padding = (runLength * 3) % 2; // Each run is padded to a 2-byte boundary
+                        stream.ReadDiscard(padding);
+                    }
+                }
+            }
+
+            return pixelData;
+        }
     }
 }

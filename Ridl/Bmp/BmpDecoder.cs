@@ -110,7 +110,7 @@ namespace Ridl.Bmp
                 pixelData = RleBitmapDecoder.DecodeRle8(stream, stride, header.Height, isTopDown);
                 format = PixelFormat.Indexed8;
             }
-            else // if (dibHeader.Header.Compression is BmpCompressionMethod.Rle4 or BmpCompressionMethod.CmykRle4)
+            else // if Rle4 or CmykRle4
             {
                 if (header.BitsPerPixel != 4)
                     throw new Exception($"Bpp must be 4. Bpp={header.BitsPerPixel}");
@@ -120,6 +120,23 @@ namespace Ridl.Bmp
             }
 
             return new BmpImage(pixelData, header.Width, header.Height, stride, format, header.DpiX, header.DpiY, colorTable);
+        }
+
+        private static BmpImage DecodeRle24(Stream stream, IBmpHeader header)
+        {
+            int stride = (header.Width * header.BitsPerPixel + 31) / 32 * 4; // align stride to 4 bytes
+
+            // technically top-down orientation isn't valid for RLE formats,
+            // but since it's doable just let it use the orientation instead of erroring.
+            bool isTopDown = header.IsTopDown;
+
+            if (header.BitsPerPixel != 24)
+                throw new Exception($"Bpp must be 24. Bpp={header.BitsPerPixel}");
+
+            byte[] pixelData = RleBitmapDecoder.DecodeRle24(stream, stride, header.Height, isTopDown);
+            PixelFormat format = PixelFormat.Bgr24;
+
+            return new BmpImage(pixelData, header.Width, header.Height, stride, format, header.DpiX, header.DpiY, null);
         }
 
         private static BmpImage DecodeBitFields(Stream stream, IBmpHeader header, BitFields masks)
@@ -385,11 +402,11 @@ namespace Ridl.Bmp
             {
                 image = DecodeRle(stream, bmpHeader, colorTable ?? throw new Exception("Indexed formats must contain a color table."));
             }
-            else if (bmpHeader.Format is BmpCompressionMethod.Huffman1D)
-            {
-                throw new NotImplementedException();
-            }
             else if (bmpHeader.Format is BmpCompressionMethod.Rle24)
+            {
+                image = DecodeRle24(stream, bmpHeader);
+            }
+            else if (bmpHeader.Format is BmpCompressionMethod.Huffman1D)
             {
                 throw new NotImplementedException();
             }
