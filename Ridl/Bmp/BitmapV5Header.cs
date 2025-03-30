@@ -6,7 +6,7 @@ namespace Ridl.Bmp
     /// <see href="https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv5header"/>
     /// </remarks>
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    internal readonly struct BitmapV5Header : IBmpHeader, IBmpHeaderV3OrAbove
+    internal readonly struct BitmapV5Header : IBmpHeader, IBmpHeaderV4OrAbove
     {
         public readonly uint SizeImage => _base.SizeImage;
         public readonly int Width => _base.Width;
@@ -21,6 +21,7 @@ namespace Ridl.Bmp
         public readonly uint GreenMask => _base.GreenMask;
         public readonly uint BlueMask => _base.BlueMask;
         public readonly uint AlphaMask => _base.AlphaMask;
+        public readonly BmpColorSpace ColorSpace => _base.ColorSpace;
 
         public uint Intent => _intent;
         public uint ProfileData => _profileData;

@@ -1,6 +1,5 @@
 ﻿using Ridl.PixelFormats;
 using System.Buffers.Binary;
-using System.Numerics;
 using System.Runtime.InteropServices;
 
 // References:
@@ -10,30 +9,14 @@ using System.Runtime.InteropServices;
 
 namespace Ridl.Bmp
 {
-    internal enum BmpHalftoneAlgorithm : ushort
-    {
-        None = 0,
-        ErrorDiffusion = 1,
-        PANDA = 2,
-        SuperCircle = 3,
-    }
-
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    public readonly record struct Bgrx32(byte B, byte G, byte R, byte Reserved)
+    internal readonly record struct Bgrx32(byte B, byte G, byte R, byte Reserved)
     {
         internal Rgb24 ToRgb24() => new(R, G, B);
     }
 
     public class BmpDecoder
     {
-        [StructLayout(LayoutKind.Sequential, Pack = 4)]
-        private struct BmpFileHeader
-        {
-            public uint FileSize;
-            private uint Reserved;
-            public uint DataOffset;
-        }
-
         private static bool CheckSignature(Stream stream)
         {
             Span<byte> sig = [ 0x42, 0x4d ];
@@ -139,294 +122,6 @@ namespace Ridl.Bmp
             return new BmpImage(pixelData, header.Width, header.Height, stride, format, header.DpiX, header.DpiY, colorTable);
         }
 
-        private static byte[] DecodeBitFields16ToRgb24(Stream stream, int width, int height, bool isTopDown, uint maskR, uint maskG, uint maskB, out int stride)
-        {
-            // >8 bit channels are downsampled to 8
-
-            int resultStride = width * Rgb24.Size;
-            byte[] pixelData = new byte[resultStride * height];
-
-            int srcRowLength = width * 2;
-            int srcRowPadding = (4 - (srcRowLength % 4)) & 0b11;
-
-            int shiftR = BitOperations.TrailingZeroCount(maskR);
-            int shiftG = BitOperations.TrailingZeroCount(maskG);
-            int shiftB = BitOperations.TrailingZeroCount(maskB);
-            // Assume the masks are contiguous, otherwise they're invalid anyway
-            int depthR = BitOperations.TrailingZeroCount((maskR >> shiftR) ^ 0xffff_ffffu);
-            int depthG = BitOperations.TrailingZeroCount((maskG >> shiftG) ^ 0xffff_ffffu);
-            int depthB = BitOperations.TrailingZeroCount((maskB >> shiftB) ^ 0xffff_ffffu);
-
-            // (2^8-1) / (2^n-1)
-            double scaleR = (double)byte.MaxValue / ((1u << depthR) - 1u);
-            double scaleG = (double)byte.MaxValue / ((1u << depthG) - 1u);
-            double scaleB = (double)byte.MaxValue / ((1u << depthB) - 1u);
-
-            if (isTopDown)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    DecodeScanline(y);
-                }
-            }
-            else
-            {
-                for (int y = height - 1; y >= 0; y--)
-                {
-                    DecodeScanline(y);
-                }
-            }
-
-            stride = resultStride;
-            return pixelData;
-
-            void DecodeScanline(int y)
-            {
-                Span<byte> resultRow = pixelData.AsSpan(resultStride * y, resultStride);
-                Span<Rgb24> resultRowRgb = MemoryMarshal.Cast<byte, Rgb24>(resultRow);
-
-                // use part of the current row (the end portion so it doesn't conflict) to store the compressed data
-                Span<byte> srcRow = resultRow[^srcRowLength..];
-                stream.ReadExactly(srcRow);
-                stream.ReadDiscard(srcRowPadding);
-
-                Span<ushort> sourceRow16 = MemoryMarshal.Cast<byte, ushort>(srcRow);
-
-                for (int x = 0; x < width; x++)
-                {
-                    ushort val = sourceRow16[x];
-                    uint r = (val & maskR) >> shiftR;
-                    uint g = (val & maskG) >> shiftG;
-                    uint b = (val & maskB) >> shiftB;
-
-                    // rescale to 8 bits
-                    r = (uint)(r * scaleR);
-                    g = (uint)(g * scaleG);
-                    b = (uint)(b * scaleB);
-
-                    resultRowRgb[x] = new Rgb24((byte)r, (byte)g, (byte)b);
-                }
-            }
-        }
-
-        private static byte[] DecodeBitFields16ToRgba32(Stream stream, int width, int height, bool isTopDown, uint maskR, uint maskG, uint maskB, uint maskA, out int stride)
-        {
-            // >8 bit channels are downsampled to 8
-
-            int resultStride = width * Rgba32.Size;
-            byte[] pixelData = new byte[resultStride * height];
-
-            int srcRowLength = width * 2;
-            int srcRowPadding = (4 - (srcRowLength % 4)) & 0b11;
-
-            int shiftR = BitOperations.TrailingZeroCount(maskR);
-            int shiftG = BitOperations.TrailingZeroCount(maskG);
-            int shiftB = BitOperations.TrailingZeroCount(maskB);
-            int shiftA = BitOperations.TrailingZeroCount(maskA);
-            // Assume the masks are contiguous, otherwise they're invalid anyway
-            int depthR = BitOperations.TrailingZeroCount((maskR >> shiftR) ^ 0xffff_ffffu);
-            int depthG = BitOperations.TrailingZeroCount((maskG >> shiftG) ^ 0xffff_ffffu);
-            int depthB = BitOperations.TrailingZeroCount((maskB >> shiftB) ^ 0xffff_ffffu);
-            int depthA = BitOperations.TrailingZeroCount((maskA >> shiftA) ^ 0xffff_ffffu);
-
-            // (2^8-1) / (2^n-1)
-            double scaleR = (double)byte.MaxValue / ((1u << depthR) - 1u);
-            double scaleG = (double)byte.MaxValue / ((1u << depthG) - 1u);
-            double scaleB = (double)byte.MaxValue / ((1u << depthB) - 1u);
-            double scaleA = (double)byte.MaxValue / ((1u << depthA) - 1u);
-
-            if (isTopDown)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    DecodeScanline(y);
-                }
-            }
-            else
-            {
-                for (int y = height - 1; y >= 0; y--)
-                {
-                    DecodeScanline(y);
-                }
-            }
-
-            stride = resultStride;
-            return pixelData;
-
-            void DecodeScanline(int y)
-            {
-                Span<byte> resultRow = pixelData.AsSpan(resultStride * y, resultStride);
-                Span<Rgba32> resultRowRgba = MemoryMarshal.Cast<byte, Rgba32>(resultRow);
-
-                // use part of the current row (the end portion so it doesn't conflict) to store the compressed data
-                Span<byte> srcRow = resultRow[^srcRowLength..];
-                stream.ReadExactly(srcRow);
-                stream.ReadDiscard(srcRowPadding);
-
-                Span<ushort> sourceRow16 = MemoryMarshal.Cast<byte, ushort>(srcRow);
-
-                for (int x = 0; x < width; x++)
-                {
-                    ushort val = sourceRow16[x];
-                    uint r = (val & maskR) >> shiftR;
-                    uint g = (val & maskG) >> shiftG;
-                    uint b = (val & maskB) >> shiftB;
-                    uint a = (val & maskA) >> shiftA;
-
-                    // rescale to 8 bits
-                    r = (uint)(r * scaleR);
-                    g = (uint)(g * scaleG);
-                    b = (uint)(b * scaleB);
-                    a = (uint)(a * scaleA);
-
-                    resultRowRgba[x] = new Rgba32((byte)r, (byte)g, (byte)b, (byte)a);
-                }
-            }
-        }
-
-        private static byte[] DecodeBitFields32ToRgb48(Stream stream, int width, int height, bool isTopDown, uint maskR, uint maskG, uint maskB, out int stride)
-        {
-            // >16 bit channels are downsampled to 16
-            int resultStride = width * Rgb48.Size;
-            byte[] pixelData = new byte[resultStride * height];
-
-            int srcRowSize = width * 4;
-            int scrRowPadding = (4 - (srcRowSize % 4)) & 0b11;
-
-            int shiftR = BitOperations.TrailingZeroCount(maskR);
-            int shiftG = BitOperations.TrailingZeroCount(maskG);
-            int shiftB = BitOperations.TrailingZeroCount(maskB);
-            // Assume the masks are contiguous, otherwise they're invalid anyway
-            int depthR = BitOperations.TrailingZeroCount(~(maskR >> shiftR));
-            int depthG = BitOperations.TrailingZeroCount(~(maskG >> shiftG));
-            int depthB = BitOperations.TrailingZeroCount(~(maskB >> shiftB));
-
-            // (2^8-1) / (2^n-1)
-            double scaleR = (double)ushort.MaxValue / ((1u << depthR) - 1u);
-            double scaleG = (double)ushort.MaxValue / ((1u << depthG) - 1u);
-            double scaleB = (double)ushort.MaxValue / ((1u << depthB) - 1u);
-
-            if (isTopDown)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    DecodeScanline(y);
-                }
-            }
-            else
-            {
-                for (int y = height - 1; y >= 0; y--)
-                {
-                    DecodeScanline(y);
-                }
-            }
-
-            stride = resultStride;
-            return pixelData;
-
-            void DecodeScanline(int y)
-            {
-                Span<byte> row = pixelData.AsSpan(resultStride * y, resultStride);
-                Span<Rgb48> rowRgb = MemoryMarshal.Cast<byte, Rgb48>(row);
-
-                // use part of the current row (the end portion so it doesn't conflict) to store the compressed data
-                Span<byte> srcRow = row[^srcRowSize..];
-                stream.ReadExactly(srcRow);
-                stream.ReadDiscard(scrRowPadding);
-
-                Span<uint> srcRow32 = MemoryMarshal.Cast<byte, uint>(srcRow);
-
-                for (int x = 0; x < width; x++)
-                {
-                    uint val = srcRow32[x];
-                    uint r = (val & maskR) >> shiftR;
-                    uint g = (val & maskG) >> shiftG;
-                    uint b = (val & maskB) >> shiftB;
-
-                    // rescale to 16 bits
-                    r = (uint)(r * scaleR);
-                    g = (uint)(g * scaleG);
-                    b = (uint)(b * scaleB);
-
-                    rowRgb[x] = new Rgb48((ushort)r, (ushort)g, (ushort)b);
-                }
-            }
-        }
-
-        private static byte[] DecodeBitFields32ToRgba64(Stream stream, int width, int height, bool isTopDown, uint maskR, uint maskG, uint maskB, uint maskA, out int stride)
-        {
-            // >16 bit channels are downsampled to 16
-            int resultStride = width * Rgba64.Size;
-            byte[] pixelData = new byte[resultStride * height];
-
-            int srcRowSize = width * 4;
-            int scrRowPadding = (4 - (srcRowSize % 4)) & 0b11;
-
-            int shiftR = BitOperations.TrailingZeroCount(maskR);
-            int shiftG = BitOperations.TrailingZeroCount(maskG);
-            int shiftB = BitOperations.TrailingZeroCount(maskB);
-            int shiftA = BitOperations.TrailingZeroCount(maskA);
-            // Assume the masks are contiguous, otherwise they're invalid anyway
-            int depthR = BitOperations.TrailingZeroCount(~(maskR >> shiftR));
-            int depthG = BitOperations.TrailingZeroCount(~(maskG >> shiftG));
-            int depthB = BitOperations.TrailingZeroCount(~(maskB >> shiftB));
-            int depthA = BitOperations.TrailingZeroCount(~(maskA >> shiftA));
-
-            // (2^8-1) / (2^n-1)
-            double scaleR = (double)ushort.MaxValue / ((1u << depthR) - 1u);
-            double scaleG = (double)ushort.MaxValue / ((1u << depthG) - 1u);
-            double scaleB = (double)ushort.MaxValue / ((1u << depthB) - 1u);
-            double scaleA = (double)ushort.MaxValue / ((1u << depthA) - 1u);
-
-            if (isTopDown)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    DecodeScanline(y);
-                }
-            }
-            else
-            {
-                for (int y = height - 1; y >= 0; y--)
-                {
-                    DecodeScanline(y);
-                }
-            }
-
-            stride = resultStride;
-            return pixelData;
-
-            void DecodeScanline(int y)
-            {
-                Span<byte> row = pixelData.AsSpan(resultStride * y, resultStride);
-                Span<Rgba64> rowRgba = MemoryMarshal.Cast<byte, Rgba64>(row);
-
-                // use part of the current row (the end portion so it doesn't conflict) to store the compressed data
-                Span<byte> srcRow = row[^srcRowSize..];
-                stream.ReadExactly(srcRow);
-                stream.ReadDiscard(scrRowPadding);
-
-                Span<uint> srcRow32 = MemoryMarshal.Cast<byte, uint>(srcRow);
-
-                for (int x = 0; x < width; x++)
-                {
-                    uint val = srcRow32[x];
-                    uint r = (val & maskR) >> shiftR;
-                    uint g = (val & maskG) >> shiftG;
-                    uint b = (val & maskB) >> shiftB;
-                    uint a = (val & maskA) >> shiftA;
-
-                    // rescale to 16 bits
-                    r = (uint)(r * scaleR);
-                    g = (uint)(g * scaleG);
-                    b = (uint)(b * scaleB);
-                    a = (uint)(a * scaleA);
-
-                    rowRgba[x] = new Rgba64((ushort)r, (ushort)g, (ushort)b, (ushort)a);
-                }
-            }
-        }
-
         private static BmpImage DecodeBitFields(Stream stream, IBmpHeader header, BitFields masks)
         {
             bool containsAlpha = masks.A != 0;
@@ -441,12 +136,12 @@ namespace Ridl.Bmp
 
                 if (!containsAlpha)
                 {
-                    pixelData = DecodeBitFields16ToRgb24(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, out stride);
+                    pixelData = BitFieldsBitmapDecoder.DecodeBitFields16ToRgb24(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, out stride);
                     format = PixelFormat.Rgb24;
                 }
                 else
                 {
-                    pixelData = DecodeBitFields16ToRgba32(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, masks.A, out stride);
+                    pixelData = BitFieldsBitmapDecoder.DecodeBitFields16ToRgba32(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, masks.A, out stride);
                     format = PixelFormat.Rgba32;
                 }
             }
@@ -454,12 +149,12 @@ namespace Ridl.Bmp
             {
                 if (!containsAlpha)
                 {
-                    pixelData = DecodeBitFields32ToRgb48(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, out stride);
+                    pixelData = BitFieldsBitmapDecoder.DecodeBitFields32ToRgb48(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, out stride);
                     format = PixelFormat.Rgb48;
                 }
                 else
                 {
-                    pixelData = DecodeBitFields32ToRgba64(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, masks.A, out stride);
+                    pixelData = BitFieldsBitmapDecoder.DecodeBitFields32ToRgba64(stream, header.Width, header.Height, header.IsTopDown, masks.R, masks.G, masks.B, masks.A, out stride);
                     format = PixelFormat.Rgba64;
                 }
             }
@@ -471,7 +166,7 @@ namespace Ridl.Bmp
         /// Decode RGB16 (5 bits each, 1 bit reserved) to RGB24
         /// </summary>
         private static byte[] DecodeRgb16ToRgb24(Stream stream, int width, int height, out int stride) =>
-            DecodeBitFields16ToRgb24(stream, width, int.Abs(height), height < 0, 0b0_11111_00000_00000, 0b0_00000_11111_00000, 0b_00000_00000_11111, out stride);
+            BitFieldsBitmapDecoder.DecodeBitFields16ToRgb24(stream, width, int.Abs(height), height < 0, 0b0_11111_00000_00000, 0b0_00000_11111_00000, 0b_00000_00000_11111, out stride);
 
         /// <summary>
         /// Decode BGRx32 (BGR24 + 8 reserved bits) to RGB24
@@ -703,16 +398,17 @@ namespace Ridl.Bmp
                 throw new InvalidDataException("Unknown BMP compression type.");
             }
 
-            if (bmpHeader is BitmapV5Header v5Header && v5Header.ProfileSize > 0)
+            // Read embedded ICC profile
+            if (bmpHeader is BitmapV5Header v5Header && v5Header.ColorSpace is BmpColorSpace.LCS_PROFILE_EMBEDDED && v5Header.ProfileSize > 0)
             {
                 currentFileOffset = (int)(fileHeader.DataOffset + v5Header.SizeImage);
-                stream.ReadDiscard((int)((14 + v5Header.ProfileData) - currentFileOffset));
-            
+                stream.ReadDiscard((int)(14 + v5Header.ProfileData - currentFileOffset));
+
                 // Read ICC Color Profile
                 byte[] colorProfileData = new byte[v5Header.ProfileSize];
                 stream.ReadExactly(colorProfileData);
 
-                //throw new NotImplementedException();
+                // TODO: ICC color profile support - ICC.1:2022 (v4.4.0.0) decoder should be able to read the embedded data
             }
 
             return image;
