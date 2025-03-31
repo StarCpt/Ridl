@@ -1,7 +1,5 @@
-﻿using Ridl.Bmp;
-using Ridl.PixelFormats;
+﻿using Ridl.PixelFormats;
 using Ridl.Png;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -239,8 +237,7 @@ namespace Ridl.Wpf
                     case 8:
                         // There is no Rgba32 PixelFormat in wpf so the pixels need to be converted to Bgra32
                         wpfFormat = WpfPixelFormats.Bgra32;
-                        Span<byte> pixelDataSpan = pixelData;
-                        Rgba32ToBgra32(ref pixelDataSpan, width, height, image.Stride);
+                        pixelData = Rgba32ToBgra32(pixelData, width, height, image.Stride);
                         break;
                     case 16: wpfFormat = WpfPixelFormats.Rgba64; break;
                     default: throw new Exception($"Invalid bit depth for {format} format. BitDepth={bitDepth}");
@@ -256,7 +253,7 @@ namespace Ridl.Wpf
             return bitmap;
         }
 
-        public static unsafe BitmapSource ToBitmapSource(this BmpImage image)
+        public static unsafe BitmapSource ToBitmapSource(this IImage image)
         {
             WpfPixelFormat wpfFormat;
             BitmapPalette? wpfPalette = null;
@@ -283,8 +280,7 @@ namespace Ridl.Wpf
             Span<byte> pixelData = image.PixelData;
             if (image.Format is PixelFormat.Rgba32)
             {
-                pixelData = pixelData.ToArray(); // copy the array for modification without changing the src image
-                Rgba32ToBgra32(ref pixelData, image.Width, image.Height, image.Stride);
+                pixelData = Rgba32ToBgra32(pixelData, image.Width, image.Height, image.Stride);
             }
 
             // BitmapSource.Create takes an array or IntPtr. Since pixelData is a span (maybe wrapping an array or not)
@@ -295,16 +291,18 @@ namespace Ridl.Wpf
             }
         }
 
-        private static void Rgba32ToBgra32(ref Span<byte> pixelData, int width, int height, int stride)
+        private static byte[] Rgba32ToBgra32(Span<byte> pixelData, int width, int height, int stride)
         {
+            byte[] converted = pixelData.ToArray();
             for (int y = 0; y < height; y++)
             {
-                Span<byte> scanline = pixelData.Slice(stride * y, stride);
+                Span<byte> scanline = converted.AsSpan(stride * y, stride);
                 for (int x = 0; x < width; x++)
                 {
                     (scanline[x * 4], scanline[x * 4 + 2]) = (scanline[x * 4 + 2], scanline[x * 4]);
                 }
             }
+            return converted;
         }
     }
 }
