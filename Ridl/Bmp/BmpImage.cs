@@ -10,7 +10,6 @@ namespace Ridl.Bmp
         public int Width { get; }
         public int Height { get; }
         public int Stride { get; }
-        public int BitsPerPixel { get; }
         public PixelFormat Format { get; }
         public double DpiX { get; }
         public double DpiY { get; }
