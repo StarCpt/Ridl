@@ -2,6 +2,8 @@
 {
     public class PngImage
     {
+        public const double DEFAULT_DPI = 96;
+
         public byte[] PixelData => _pixelData;
 
         public int Width => _metadata.Width;
@@ -19,6 +21,42 @@
         /// <remarks>Always 0.</remarks>
         internal byte Filter => _metadata.Filter;
         internal PngInterlaceMethod Interlace => _metadata.Interlace;
+
+        public double DpiX
+        {
+            get
+            {
+                double dpiX = DEFAULT_DPI;
+                if (PixelDimensions is PngPixelDimensions dims)
+                {
+                    if (dims.Units is PngPixelUnit.Unknown)
+                    {
+                        double aspectRatio = (double)dims.PixelsPerUnitX / dims.PixelsPerUnitY;
+                        dpiX *= aspectRatio;
+                    }
+                    else if (dims.Units is PngPixelUnit.Meter)
+                    {
+                        dpiX = MathHelpers.DpmToDpi(dims.PixelsPerUnitX, 1);
+                    }
+                }
+                return dpiX;
+            }
+        }
+        public double DpiY
+        {
+            get
+            {
+                double dpiY = DEFAULT_DPI;
+                if (PixelDimensions is PngPixelDimensions dims)
+                {
+                    if (dims.Units is PngPixelUnit.Meter)
+                    {
+                        dpiY = MathHelpers.DpmToDpi(dims.PixelsPerUnitY, 1);
+                    }
+                }
+                return dpiY;
+            }
+        }
 
         // Ancilary chunks
         public PngPaletteColor[]? Palette => _metadata.Palette;
